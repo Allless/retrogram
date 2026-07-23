@@ -32,9 +32,9 @@ One slide per stat, story-style:
 ## How it works
 
 1. **Connect your account.** On desktop: scan the QR code, or tap _Open in
-   Telegram_ if you have Telegram Desktop. On mobile: log in with phone number
-   - login code (Telegram's mobile apps intentionally don't confirm same-device
-     QR deep links).
+   Telegram_ if you have Telegram Desktop. On mobile: log in with your phone
+   number and a login code (Telegram's mobile apps intentionally don't confirm
+   same-device QR deep links).
 2. gramjs opens an **MTProto session in the browser** — you become a linked
    device on your own account.
 3. The last 12 months of your history are read and analyzed **locally**, then
