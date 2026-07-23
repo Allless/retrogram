@@ -58,9 +58,11 @@ export function QrConnect({ onConnected }: QrConnectProps) {
   const [mode, setMode] = useState<Mode>(isMobile ? "phone" : "qr");
   const [error, setError] = useState<string | null>(null);
 
-  // QR flow state.
+  // QR flow state. `qrPasswordPending` swaps the QR for a 2FA password form
+  // once the code has been scanned and Telegram asks for two-step auth.
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrPasswordPending, setQrPasswordPending] = useState(false);
 
   // Phone flow state. gramjs drives the flow by awaiting callbacks; the form
   // resolves the pending one on submit. Bumping `phoneAttempt` abandons the
@@ -80,6 +82,9 @@ export function QrConnect({ onConnected }: QrConnectProps) {
     setError(null);
     setLoginUrl(null);
     setQrDataUrl(null);
+    setQrPasswordPending(false);
+    setInputValue("");
+    pendingInput.current = null;
 
     startQrLogin({
       onClient: (c) => {
@@ -89,11 +94,21 @@ export function QrConnect({ onConnected }: QrConnectProps) {
         if (!cancelled) setLoginUrl(url);
       },
       onError: (err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          setError(err.message);
+          setBusy(false);
+        }
         return false;
       },
-      password: async () =>
-        window.prompt("Enter your Telegram 2FA password") ?? "",
+      // Re-called by gramjs on a wrong password; each call re-arms the form.
+      password: () =>
+        new Promise<string>((resolve) => {
+          if (cancelled) return;
+          pendingInput.current = resolve;
+          setQrPasswordPending(true);
+          setInputValue("");
+          setBusy(false);
+        }),
     })
       .then((connected) => {
         succeeded = true;
@@ -194,7 +209,30 @@ export function QrConnect({ onConnected }: QrConnectProps) {
 
       {error && <p class="error">{error}</p>}
 
-      {mode === "qr" && (
+      {mode === "qr" && qrPasswordPending && (
+        <form class="phone-fallback" onSubmit={submitPhoneStep}>
+          <label class="muted hint" for="qr-password-input">
+            Two-step password
+          </label>
+          <input
+            id="qr-password-input"
+            type="password"
+            placeholder="2FA password"
+            value={inputValue}
+            onInput={(e) => setInputValue(e.currentTarget.value)}
+            disabled={busy}
+          />
+          <button type="submit" class="btn-primary" disabled={busy}>
+            {busy ? "Verifying…" : "Verify"}
+          </button>
+          <p class="muted hint">
+            QR code scanned. Enter your two-step verification password to finish
+            signing in.
+          </p>
+        </form>
+      )}
+
+      {mode === "qr" && !qrPasswordPending && (
         <>
           <div class="qr-box">
             {qrDataUrl ? (

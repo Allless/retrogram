@@ -86,6 +86,11 @@ export function MediaStat({
                   loop
                   muted
                   playsinline
+                  onError={() =>
+                    // Codec unsupported (e.g. WebM on older Safari) — show
+                    // the placeholder rather than a dead player.
+                    setPreviews((prev) => ({ ...prev, [mediaId]: null }))
+                  }
                 />
               ) : (
                 <img
