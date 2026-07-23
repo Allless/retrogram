@@ -64,9 +64,9 @@ export function SharePanel({
 
     const { summary, thumbSources } = buildShare(dataset, selected);
     // Sticker/GIF thumbs always embed with their section (public catalog
-    // items); hit photo/video thumbs only with the explicit opt-in.
+    // items); hit text + photo/video thumbs only with the explicit opt-in.
     const sources = {
-      hits: selected.has("thumbs") ? thumbSources.hits : [],
+      hits: selected.has("hitContent") ? thumbSources.hits : [],
       stickers: thumbSources.stickers,
       gifs: thumbSources.gifs,
     };
@@ -112,7 +112,7 @@ export function SharePanel({
     }
   };
 
-  // Both opt-ins reveal Greatest hits content, so both need that section.
+  // The opt-in reveals Greatest hits content, so it needs that section.
   const extraDisabled = (): boolean => !selected.has("hits");
 
   return (

@@ -46,7 +46,7 @@ describe("buildShare", () => {
   it("includes hit text only with the opt-in", () => {
     const withText = buildShare(
       sampleDataset,
-      new Set(["hits", "hitText"]),
+      new Set(["hits", "hitContent"]),
     ).summary;
     const textHit = withText.hits?.find((h) => h.text);
     expect(textHit).toBeDefined();

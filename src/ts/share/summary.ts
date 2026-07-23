@@ -38,12 +38,14 @@ export const SHARE_SECTIONS = [
 ] as const;
 
 /**
- * Off-by-default opt-ins that reveal personal content (Greatest hits only —
+ * Off-by-default opt-in that reveals personal content (Greatest hits only —
  * sticker/GIF thumbnails are public catalog items and always embed).
  */
 export const SHARE_EXTRAS = [
-  { key: "hitText", label: "Include my message text (Greatest hits)" },
-  { key: "thumbs", label: "Include my photo/video thumbnails (Greatest hits)" },
+  {
+    key: "hitContent",
+    label: "Include my messages (text & media previews) in Greatest hits",
+  },
 ] as const;
 
 export type ShareSection =
@@ -171,7 +173,7 @@ export function buildShare(
         reactionEmoji: hit.reactionEmoji,
         mediaType: hit.mediaType,
       };
-      if (sections.has("hitText") && hit.text) {
+      if (sections.has("hitContent") && hit.text) {
         shared.text =
           hit.text.length > HIT_TEXT_LIMIT
             ? `${hit.text.slice(0, HIT_TEXT_LIMIT)}…`
