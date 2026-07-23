@@ -5,6 +5,7 @@ import { clearSession } from "./auth/qrLogin";
 import { Dashboard } from "./dashboard/Dashboard";
 import { fetchPeerRefs, ingest } from "./ingestion/ingest";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
+import { REPO_URL } from "./links";
 
 import type { MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { TelegramClient } from "telegram";
@@ -127,7 +128,24 @@ export function App() {
 
       <footer class="app-footer">
         <p class="muted">
-          Not affiliated with Telegram. Your data never leaves your device.
+          Open source (MIT) ·{" "}
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            Source &amp; issues on GitHub
+          </a>{" "}
+          · No backend, no analytics, no tracking — not affiliated with
+          Telegram.
+          {__COMMIT_HASH__ && (
+            <>
+              {" · Deployed from "}
+              <a
+                href={`${REPO_URL}/commit/${__COMMIT_HASH__}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <code>{__COMMIT_HASH__}</code>
+              </a>
+            </>
+          )}
         </p>
       </footer>
     </div>

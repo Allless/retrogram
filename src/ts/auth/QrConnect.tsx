@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import QRCode from "qrcode";
 
 import { startPhoneLogin, startQrLogin } from "./qrLogin";
+import { REPO_URL } from "../links";
 
 import type { TelegramClient } from "telegram";
 
@@ -266,6 +267,41 @@ export function QrConnect({ onConnected }: QrConnectProps) {
           </button>
         </>
       )}
+
+      <p class="muted hint trust-note">
+        Retrogram is open-source and has no server — it runs entirely in this
+        browser tab. Your login talks only to Telegram's own API, and your
+        session never leaves this device. Don't take our word for it:{" "}
+        <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          read the source
+        </a>{" "}
+        or watch the network tab.
+      </p>
+
+      <details class="trust-details">
+        <summary>Is this safe?</summary>
+        <ul>
+          <li>
+            The only network requests go to Telegram's servers — there is
+            nothing else to send data to. Open DevTools → Network and check.
+          </li>
+          <li>
+            Your session key is stored in this browser's localStorage only.
+            Disconnect wipes it.
+          </li>
+          <li>
+            You can revoke this device anytime in Telegram → Settings → Devices.
+          </li>
+          <li>
+            This site is built and deployed automatically from the{" "}
+            <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+              public repository
+            </a>{" "}
+            by GitHub Actions — what you're running is what's on GitHub.
+          </li>
+          <li>Independent project, not affiliated with Telegram.</li>
+        </ul>
+      </details>
     </section>
   );
 }

@@ -244,6 +244,31 @@ a:hover {
   font-size: 0.82rem;
 }
 
+.trust-note {
+  max-width: 400px;
+}
+
+.trust-details {
+  width: 100%;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.trust-details summary {
+  cursor: pointer;
+  text-align: center;
+  color: var(--accent-2);
+}
+
+.trust-details ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .error {
   color: #d64545;
   font-size: 0.9rem;
