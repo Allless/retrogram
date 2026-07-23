@@ -63,6 +63,15 @@ const Card: FunctionComponent<{ result: ActivityHeatmapResult }> = ({
   return (
     <div class="stat-heatmap">
       <div class="stat-heatmap__grid">
+        <div class="stat-heatmap__row" aria-hidden="true">
+          <span class="stat-heatmap__label" />
+          {Array.from({ length: HOURS_PER_DAY }, (_, hour) => (
+            <span class="stat-heatmap__hour" key={hour}>
+              {/* Every 3rd hour — 24 labels would collide at this cell width. */}
+              {hour % 3 === 0 ? hour : ""}
+            </span>
+          ))}
+        </div>
         {Array.from({ length: DAYS_PER_WEEK }, (_, weekday) => (
           <div class="stat-heatmap__row" key={weekday}>
             <span class="stat-heatmap__label">{WEEKDAY_LABELS[weekday]}</span>

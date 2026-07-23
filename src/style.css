@@ -506,6 +506,15 @@ a:hover {
   color: var(--text-muted);
 }
 
+.stat-heatmap__hour {
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: visible;
+  font-variant-numeric: tabular-nums;
+}
+
 .stat-heatmap__cell {
   height: 15px;
   min-width: 6px;
