@@ -22,12 +22,13 @@ interface TelegraphResponse {
 
 async function call(
   method: string,
-  params: Record<string, unknown>,
+  params: Record<string, string>,
 ): Promise<Record<string, unknown>> {
+  // Form-encoded on purpose: it's a CORS "simple request", so the browser
+  // skips the OPTIONS preflight — which telegra.ph answers with 501.
   const response = await fetch(`${API}/${method}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: new URLSearchParams(params),
   });
   const body = (await response.json()) as TelegraphResponse;
   if (!body.ok || typeof body.result !== "object" || body.result === null) {
@@ -36,8 +37,14 @@ async function call(
   return body.result as Record<string, unknown>;
 }
 
+/** Telegraph rejects pages over 64KB; refuse early so the caller falls back. */
+const MAX_PAYLOAD_CHARS = 60_000;
+
 /** Upload a share payload; returns the page path and its edit token. */
 export async function uploadShare(payload: string): Promise<TelegraphShare> {
+  if (payload.length > MAX_PAYLOAD_CHARS) {
+    throw new Error("share payload exceeds Telegraph's page size limit");
+  }
   const account = await call("createAccount", { short_name: "retrogram" });
   const accessToken = account.access_token;
   if (typeof accessToken !== "string") {
@@ -46,9 +53,10 @@ export async function uploadShare(payload: string): Promise<TelegraphShare> {
 
   const page = await call("createPage", {
     access_token: accessToken,
-    title: "Retrogram shared report",
+    // Single-letter title → short page path → short share URL.
+    title: "r",
     author_name: "Retrogram",
-    content: [{ tag: "p", children: [payload] }],
+    content: JSON.stringify([{ tag: "p", children: [payload] }]),
   });
   const path = page.path;
   if (typeof path !== "string") {
@@ -70,7 +78,7 @@ function textOf(node: unknown): string {
 /** Fetch a share payload back from its page path. */
 export async function fetchShare(path: string): Promise<string> {
   const page = await call(`getPage/${encodeURIComponent(path)}`, {
-    return_content: true,
+    return_content: "true",
   });
   const payload = textOf(page.content).trim();
   if (!payload) {

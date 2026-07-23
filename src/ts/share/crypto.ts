@@ -32,8 +32,10 @@ export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
 export async function encryptText(
   plain: string,
 ): Promise<{ payload: string; key: string }> {
+  // 128-bit keys keep the share URL short (22 base64url chars vs 43) and are
+  // ample for this threat model.
   const cryptoKey = await crypto.subtle.generateKey(
-    { name: "AES-GCM", length: 256 },
+    { name: "AES-GCM", length: 128 },
     true,
     ["encrypt"],
   );
