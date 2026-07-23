@@ -63,8 +63,10 @@ export function QrConnect({ onConnected }: QrConnectProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   // Phone flow state. gramjs drives the flow by awaiting callbacks; the form
-  // resolves the pending one on submit.
+  // resolves the pending one on submit. Bumping `phoneAttempt` abandons the
+  // current flow and starts a fresh one (e.g. after a mistyped number).
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("phone");
+  const [phoneAttempt, setPhoneAttempt] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const [busy, setBusy] = useState(true);
   const pendingInput = useRef<((value: string) => void) | null>(null);
@@ -160,7 +162,7 @@ export function QrConnect({ onConnected }: QrConnectProps) {
       cancelled = true;
       if (!succeeded) void client?.disconnect().catch(() => undefined);
     };
-  }, [mode, onConnected]);
+  }, [mode, phoneAttempt, onConnected]);
 
   // Re-render the QR image whenever the token rotates (~30s).
   useEffect(() => {
@@ -257,6 +259,16 @@ export function QrConnect({ onConnected }: QrConnectProps) {
             </button>
             <p class="muted hint">{stepUi.hint}</p>
           </form>
+
+          {phoneStep !== "phone" && (
+            <button
+              type="button"
+              class="link-button"
+              onClick={() => setPhoneAttempt((n) => n + 1)}
+            >
+              Start over with a different number
+            </button>
+          )}
 
           <button
             type="button"
