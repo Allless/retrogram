@@ -7,6 +7,7 @@
 import type { FunctionComponent } from "preact";
 
 import { formatDay } from "./shared/formatDate";
+import { HitMedia } from "../media/hitPreviews";
 import { defineStat } from "./registry";
 import type { Dataset, MediaType } from "../model/types";
 
@@ -30,7 +31,7 @@ export interface GreatestHitsResult {
 const MAX_HITS = 3;
 const SNIPPET_LENGTH = 100;
 
-const MEDIA_LABELS: Record<MediaType, string> = {
+export const MEDIA_LABELS: Record<MediaType, string> = {
   text: "a message",
   photo: "a photo",
   video: "a video",
@@ -91,12 +92,20 @@ const Card: FunctionComponent<{ result: GreatestHitsResult }> = ({
             <span class="hit-count">{hit.reactionCount}</span>
             <span class="hit-emoji">{hit.reactionEmoji.join(" ")}</span>
           </div>
-          {snippet(hit) ? (
+          {hit.mediaType !== "text" && (
+            <HitMedia
+              messageId={hit.messageId}
+              fallback={
+                snippet(hit) ? null : (
+                  <blockquote class="hit-text muted">
+                    {MEDIA_LABELS[hit.mediaType]}
+                  </blockquote>
+                )
+              }
+            />
+          )}
+          {snippet(hit) && (
             <blockquote class="hit-text">{snippet(hit)}</blockquote>
-          ) : (
-            <blockquote class="hit-text muted">
-              {MEDIA_LABELS[hit.mediaType]}
-            </blockquote>
           )}
           <span class="muted hit-meta">
             {hit.chatTitle} · {formatDay(hit.timestamp, result.timezone)}

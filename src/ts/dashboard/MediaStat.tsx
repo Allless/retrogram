@@ -36,9 +36,22 @@ export function MediaStat({
     let cancelled = false;
     const created: string[] = [];
 
+    // A message carrying each document, for on-demand ref recovery when the
+    // session-only ref map is empty (cache-restored) or references expired.
+    const messageByMedia = new Map<string, string>();
+    for (const message of dataset.messages) {
+      if (message.mediaId && !messageByMedia.has(message.mediaId)) {
+        messageByMedia.set(message.mediaId, message.id);
+      }
+    }
+
     void (async () => {
       for (const { mediaId } of topMediaByType(dataset, mediaType, TOP)) {
-        const preview = await getMediaPreview(media, mediaId);
+        const preview = await getMediaPreview(
+          media,
+          mediaId,
+          messageByMedia.get(mediaId),
+        );
         if (cancelled) {
           if (preview) URL.revokeObjectURL(preview.url);
           return;

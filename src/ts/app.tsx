@@ -12,7 +12,7 @@ import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
 
-import type { MediaRefs, PeerRefs } from "./ingestion/ingest";
+import type { HitRefs, MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { ShareRef } from "./share/link";
 import type { SharedSummary } from "./share/summary";
 import type { TelegramClient } from "telegram";
@@ -38,6 +38,7 @@ export function App() {
   const [client, setClient] = useState<TelegramClient | null>(null);
   const [mediaRefs, setMediaRefs] = useState<MediaRefs>(new Map());
   const [peerRefs, setPeerRefs] = useState<PeerRefs>(new Map());
+  const [hitRefs, setHitRefs] = useState<HitRefs>(new Map());
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,10 +89,12 @@ export function App() {
         dataset: data,
         mediaRefs: refs,
         peerRefs: peers,
+        hitRefs: hits,
       } = await loadOrIngest(connected, setProgress);
       setDataset(data);
       setMediaRefs(refs);
       setPeerRefs(peers);
+      setHitRefs(hits);
       setStatus("ready");
     } catch (err) {
       setError(
@@ -110,22 +113,34 @@ export function App() {
     setClient(null);
     setMediaRefs(new Map());
     setPeerRefs(new Map());
+    setHitRefs(new Map());
     setError(null);
     setStatus("connect");
   };
 
   // Media downloads need a live client; the refs only exist after a fresh
   // ingest (a cache-restored dataset shows fallbacks instead).
-  const media = client ? { client, refs: mediaRefs, peers: peerRefs } : null;
+  const media = client
+    ? { client, refs: mediaRefs, peers: peerRefs, messages: hitRefs }
+    : null;
 
   return (
     <div class="app">
       <header class="app-header">
         <h1 class="wordmark">
-          <span class="wordmark-rewind" aria-hidden="true">
-            ◀◀
-          </span>
-          Retrogram
+          <a
+            class="wordmark-link"
+            href={location.pathname}
+            onClick={(event) => {
+              event.preventDefault();
+              if (shareRef) exitShared();
+            }}
+          >
+            <span class="wordmark-rewind" aria-hidden="true">
+              ◀◀
+            </span>
+            Retrogram
+          </a>
         </h1>
         <p class="tagline">Your Telegram, in review — 100% in your browser</p>
       </header>
@@ -233,7 +248,12 @@ async function loadSharedSummary(ref: ShareRef): Promise<SharedSummary> {
 async function loadOrIngest(
   client: TelegramClient,
   onProgress: (p: Progress) => void,
-): Promise<{ dataset: Dataset; mediaRefs: MediaRefs; peerRefs: PeerRefs }> {
+): Promise<{
+  dataset: Dataset;
+  mediaRefs: MediaRefs;
+  peerRefs: PeerRefs;
+  hitRefs: HitRefs;
+}> {
   const me = await client.getMe();
   const selfId = `user:${String(me.id)}`;
 
@@ -245,10 +265,15 @@ async function loadOrIngest(
     const peerRefs = await fetchPeerRefs(client).catch(
       () => new Map() as PeerRefs,
     );
-    return { dataset: cached, mediaRefs: new Map(), peerRefs };
+    return {
+      dataset: cached,
+      mediaRefs: new Map(),
+      peerRefs,
+      hitRefs: new Map(),
+    };
   }
 
-  const { dataset, mediaRefs, peerRefs } = await ingest(client, { onProgress });
-  await saveDataset(dataset);
-  return { dataset, mediaRefs, peerRefs };
+  const result = await ingest(client, { onProgress });
+  await saveDataset(result.dataset);
+  return result;
 }

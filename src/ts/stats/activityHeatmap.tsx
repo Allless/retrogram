@@ -1,3 +1,5 @@
+import { useState } from "preact/hooks";
+
 import type { FunctionComponent } from "preact";
 
 import type { Dataset } from "../model/types";
@@ -55,20 +57,29 @@ function compute(dataset: Dataset): ActivityHeatmapResult {
   };
 }
 
+interface HoveredSlot {
+  weekday: number;
+  hour: number;
+  count: number;
+}
+
 const Card: FunctionComponent<{ result: ActivityHeatmapResult }> = ({
   result,
 }) => {
   const max = result.busiestSlot.count;
+  // Native title tooltips can't be styled — show hovered-cell details in the
+  // readout line under the grid instead (contribution-graph style).
+  const [hovered, setHovered] = useState<HoveredSlot | null>(null);
 
   return (
     <div class="stat-heatmap">
-      <div class="stat-heatmap__grid">
+      <div class="stat-heatmap__grid" onMouseLeave={() => setHovered(null)}>
         <div class="stat-heatmap__row" aria-hidden="true">
           <span class="stat-heatmap__label" />
           {Array.from({ length: HOURS_PER_DAY }, (_, hour) => (
             <span class="stat-heatmap__hour" key={hour}>
               {/* Every 3rd hour — 24 labels would collide at this cell width. */}
-              {hour % 3 === 0 ? hour : ""}
+              {hour % 3 === 0 ? `${hour}:00` : ""}
             </span>
           ))}
         </div>
@@ -82,7 +93,7 @@ const Card: FunctionComponent<{ result: ActivityHeatmapResult }> = ({
                 <span
                   class="stat-heatmap__cell"
                   key={hour}
-                  title={`${WEEKDAY_LABELS[weekday]} ${hour}:00 — ${count}`}
+                  onMouseEnter={() => setHovered({ weekday, hour, count })}
                   style={{
                     backgroundColor: `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)`,
                   }}
@@ -93,9 +104,11 @@ const Card: FunctionComponent<{ result: ActivityHeatmapResult }> = ({
         ))}
       </div>
       <p class="stat-heatmap__summary">
-        {max > 0
-          ? `Busiest: ${WEEKDAY_LABELS[result.busiestSlot.weekday]} around ${result.busiestSlot.hour}:00`
-          : "No activity yet"}
+        {hovered
+          ? `${WEEKDAY_LABELS[hovered.weekday]} ${hovered.hour}:00–${(hovered.hour + 1) % 24}:00 · ${hovered.count} ${hovered.count === 1 ? "message" : "messages"}`
+          : max > 0
+            ? `Busiest: ${WEEKDAY_LABELS[result.busiestSlot.weekday]} around ${result.busiestSlot.hour}:00`
+            : "No activity yet"}
       </p>
     </div>
   );

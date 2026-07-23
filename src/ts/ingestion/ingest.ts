@@ -229,10 +229,18 @@ export type MediaRefs = Map<string, unknown>;
  */
 export type PeerRefs = Map<PeerId, unknown>;
 
+/**
+ * In-memory map of message id → the raw gramjs message, kept for reacted
+ * media messages so "Greatest hits" can render their photos/videos.
+ * Session-only, like the other ref maps.
+ */
+export type HitRefs = Map<string, unknown>;
+
 export interface IngestResult {
   dataset: Dataset;
   mediaRefs: MediaRefs;
   peerRefs: PeerRefs;
+  hitRefs: HitRefs;
 }
 
 /**
@@ -275,6 +283,7 @@ export async function ingest(
   const messages: Message[] = [];
   const mediaRefs: MediaRefs = new Map();
   const peerRefs: PeerRefs = new Map();
+  const hitRefs: HitRefs = new Map();
   let partial = false;
 
   // Drop dialogs with no activity in the window up front — this avoids a
@@ -364,6 +373,14 @@ export async function ingest(
         ) {
           mediaRefs.set(normalized.mediaId, rawMsg);
         }
+        // Keep refs for reacted media messages — "Greatest hits" candidates.
+        if (
+          normalized.reactionCount > 0 &&
+          normalized.mediaType !== "text" &&
+          normalized.direction === "sent"
+        ) {
+          hitRefs.set(normalized.id, rawMsg);
+        }
         // Attribute unknown non-self senders in groups as contacts lazily.
         if (!contacts[raw.senderId]) {
           contacts[raw.senderId] = {
@@ -406,5 +423,5 @@ export async function ingest(
     },
   };
 
-  return { dataset, mediaRefs, peerRefs };
+  return { dataset, mediaRefs, peerRefs, hitRefs };
 }

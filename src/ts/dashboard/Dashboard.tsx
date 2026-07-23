@@ -8,12 +8,13 @@ import {
 
 import { STAT_REGISTRY } from "../stats/allStats";
 import { AvatarContext, type AvatarSource } from "../media/avatars";
-import { getAvatarUrl } from "../media/downloadMedia";
+import { getAvatarUrl, getHitPreview } from "../media/downloadMedia";
+import { HitPreviewContext, type HitPreviewSource } from "../media/hitPreviews";
 import { MediaStat } from "./MediaStat";
 import { SharePanel } from "./SharePanel";
 
 import type { ComponentChildren } from "preact";
-import type { MediaContext } from "../media/downloadMedia";
+import type { MediaContext, MediaPreview } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
 
 interface Slide {
@@ -69,6 +70,51 @@ function AvatarProvider({
   );
 }
 
+/** Same pattern as AvatarProvider, for "Greatest hits" media previews. */
+function HitPreviewProvider({
+  media,
+  children,
+}: {
+  media: MediaContext | null;
+  children: ComponentChildren;
+}) {
+  const [previews, setPreviews] = useState<Record<string, MediaPreview | null>>(
+    {},
+  );
+  const requested = useRef(new Set<string>());
+  const created = useRef<string[]>([]);
+
+  useEffect(
+    () => () => {
+      for (const url of created.current) URL.revokeObjectURL(url);
+    },
+    [],
+  );
+
+  const request = useCallback(
+    (messageId: string) => {
+      if (requested.current.has(messageId)) return;
+      requested.current.add(messageId);
+      void getHitPreview(media, messageId).then((preview) => {
+        if (preview) created.current.push(preview.url);
+        setPreviews((prev) => ({ ...prev, [messageId]: preview }));
+      });
+    },
+    [media],
+  );
+
+  const source = useMemo<HitPreviewSource>(
+    () => ({ request, previews }),
+    [request, previews],
+  );
+
+  return (
+    <HitPreviewContext.Provider value={source}>
+      {children}
+    </HitPreviewContext.Provider>
+  );
+}
+
 interface DashboardProps {
   dataset: Dataset;
   media: MediaContext | null;
@@ -115,6 +161,13 @@ export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
         />
       ),
     },
+    {
+      id: "share",
+      title: "Share your year",
+      description:
+        "Pick sections and get an anonymized link — never names or messages.",
+      content: <SharePanel dataset={dataset} media={media} />,
+    },
   ];
 
   const [index, setIndex] = useState(0);
@@ -143,66 +196,81 @@ export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
 
   return (
     <AvatarProvider media={media}>
-      <section class="dashboard">
-        <div class="dashboard-head">
-          <h2>Your Telegram, in review</h2>
-          <button type="button" class="btn-secondary" onClick={onDisconnect}>
-            Disconnect
-          </button>
-        </div>
+      <HitPreviewProvider media={media}>
+        <section class="dashboard">
+          <div class="dashboard-head">
+            <h2>Your Telegram, in review</h2>
+            <div class="head-actions">
+              <button
+                type="button"
+                class="btn-secondary"
+                onClick={() => goTo(count - 1)}
+              >
+                Share
+              </button>
+              <button
+                type="button"
+                class="btn-secondary"
+                onClick={onDisconnect}
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
 
-        <p class="muted">
-          {dataset.meta.messageCount.toLocaleString()} messages analyzed on your
-          device{dataset.meta.partial ? " (partial history)" : ""}. Nothing was
-          uploaded.
-        </p>
+          <p class="muted">
+            {dataset.meta.messageCount.toLocaleString()} messages analyzed on
+            your device{dataset.meta.partial ? " (partial history)" : ""}.
+            Nothing was uploaded.
+          </p>
 
-        <SharePanel dataset={dataset} />
+          <div class="story-bar" role="tablist" aria-label="Stats slides">
+            {slides.map((s, i) => (
+              <button
+                type="button"
+                key={s.id}
+                class={
+                  i <= current ? "story-seg story-seg-filled" : "story-seg"
+                }
+                aria-label={s.title}
+                aria-selected={i === current}
+                role="tab"
+                onClick={() => goTo(i)}
+              />
+            ))}
+          </div>
 
-        <div class="story-bar" role="tablist" aria-label="Stats slides">
-          {slides.map((s, i) => (
+          <article class="stat-card slide-card" key={slide.id}>
+            <header class="stat-card-head">
+              <h3>{slide.title}</h3>
+              <p class="muted">{slide.description}</p>
+            </header>
+            {slide.content}
+          </article>
+
+          <nav class="slide-nav" aria-label="Slide navigation">
             <button
               type="button"
-              key={s.id}
-              class={i <= current ? "story-seg story-seg-filled" : "story-seg"}
-              aria-label={s.title}
-              aria-selected={i === current}
-              role="tab"
-              onClick={() => goTo(i)}
-            />
-          ))}
-        </div>
-
-        <article class="stat-card slide-card" key={slide.id}>
-          <header class="stat-card-head">
-            <h3>{slide.title}</h3>
-            <p class="muted">{slide.description}</p>
-          </header>
-          {slide.content}
-        </article>
-
-        <nav class="slide-nav" aria-label="Slide navigation">
-          <button
-            type="button"
-            class="btn-secondary"
-            disabled={current === 0}
-            onClick={() => goTo(current - 1)}
-          >
-            ← Prev
-          </button>
-          <span class="slide-count muted">
-            {current + 1} / {count}
-          </span>
-          <button
-            type="button"
-            class="btn-secondary"
-            disabled={current === count - 1}
-            onClick={() => goTo(current + 1)}
-          >
-            Next →
-          </button>
-        </nav>
-      </section>
+              class="btn-secondary"
+              disabled={current === 0}
+              onClick={() => goTo(current - 1)}
+            >
+              ← Prev
+            </button>
+            <span class="slide-count muted">
+              {current + 1} / {count}
+            </span>
+            <button
+              type="button"
+              class="btn-secondary"
+              disabled={current === count - 1}
+              onClick={() => goTo(current + 1)}
+            >
+              Next →
+            </button>
+          </nav>
+        </section>
+      </HitPreviewProvider>
     </AvatarProvider>
   );
 }

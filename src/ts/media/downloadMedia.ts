@@ -12,13 +12,15 @@
 
 import type { TelegramClient } from "telegram";
 
+import { debug } from "../debug";
 import { loadBlob, saveBlob, type StoredBlob } from "../store/datasetCache";
-import type { MediaRefs, PeerRefs } from "../ingestion/ingest";
+import type { HitRefs, MediaRefs, PeerRefs } from "../ingestion/ingest";
 
 export interface MediaContext {
   client: TelegramClient;
   refs: MediaRefs;
   peers: PeerRefs;
+  messages: HitRefs;
 }
 
 export interface MediaPreview {
@@ -36,6 +38,30 @@ interface DownloaderClient {
     entity: unknown,
     params?: { isBig?: boolean },
   ): Promise<unknown>;
+  getMessages(entity: unknown, params?: { ids: number[] }): Promise<unknown[]>;
+}
+
+/**
+ * Re-fetch a single message to get a fresh downloadable reference. The ref
+ * maps only live for the session that ingested, and Telegram file references
+ * expire — this recovers both cases: `Message.id` encodes `chatId:messageId`,
+ * and the peer map resolves the chat entity.
+ */
+async function refreshMessageRef(
+  media: MediaContext,
+  messageId: string,
+): Promise<unknown | null> {
+  const parts = messageId.split(":");
+  const id = Number(parts.pop());
+  const entity = media.peers.get(parts.join(":"));
+  if (!entity || !Number.isFinite(id)) return null;
+  try {
+    const api = media.client as unknown as DownloaderClient;
+    const [message] = await api.getMessages(entity, { ids: [id] });
+    return message ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Copy downloaded bytes into a persistable blob record, or null if empty. */
@@ -113,23 +139,87 @@ async function downloadPreviewBlob(
   }
 }
 
+function isAnimatedDoc(message: unknown): boolean {
+  const doc = (message as { document?: { attributes?: unknown } } | null)
+    ?.document;
+  const attributes = doc?.attributes;
+  return (
+    Array.isArray(attributes) &&
+    attributes.some(
+      (attr) =>
+        (attr as { className?: unknown } | null)?.className ===
+        "DocumentAttributeAnimated",
+    )
+  );
+}
+
+/**
+ * Preview for a reacted media message ("Greatest hits"): photos download in
+ * full, gifs/video-stickers play, but plain videos — which can be huge — show
+ * their largest thumbnail frame instead. Cache-first like everything else.
+ */
+export async function getHitPreview(
+  media: MediaContext | null,
+  messageId: string,
+): Promise<MediaPreview | null> {
+  const key = `hit:${messageId}`;
+  const cached = await loadBlob(key);
+  if (cached) return { url: urlOf(cached), video: cached.video };
+
+  if (!media) return null;
+  const ref =
+    media.messages.get(messageId) ??
+    (await refreshMessageRef(media, messageId));
+  if (!ref) return null;
+
+  const mime = mimeOf(ref);
+  let blob: StoredBlob | null;
+  if (mime?.startsWith("video/") && !isAnimatedDoc(ref)) {
+    try {
+      const api = media.client as unknown as DownloaderClient;
+      blob = await downloadLargestThumb(api, ref);
+    } catch {
+      blob = null;
+    }
+  } else {
+    blob = await downloadPreviewBlob(media.client, ref);
+  }
+  if (!blob) return null;
+  void saveBlob(key, blob);
+  return { url: urlOf(blob), video: blob.video };
+}
+
 /**
  * Preview for a sticker/gif document: the persisted blob if one exists, else
- * a live download (persisted for future sessions). `null` when the bytes are
- * neither cached nor reachable (no live session or no ref).
+ * a live download (persisted for future sessions). When the session-only ref
+ * map has no entry — cache-restored session, or the download failed on an
+ * expired reference — `viaMessageId` re-fetches that message for a fresh ref.
  */
 export async function getMediaPreview(
   media: MediaContext | null,
   mediaId: string,
+  viaMessageId?: string,
 ): Promise<MediaPreview | null> {
   const key = `media:${mediaId}`;
   const cached = await loadBlob(key);
   if (cached) return { url: urlOf(cached), video: cached.video };
+  if (!media) return null;
 
-  const ref = media?.refs.get(mediaId);
-  if (!media || !ref) return null;
-  const blob = await downloadPreviewBlob(media.client, ref);
-  if (!blob) return null;
+  let ref = media.refs.get(mediaId);
+  let blob = ref ? await downloadPreviewBlob(media.client, ref) : null;
+  if (!blob && viaMessageId) {
+    debug(
+      `media ${mediaId}: ${ref ? "download failed" : "no ref"}, recovering via ${viaMessageId}`,
+    );
+    ref = await refreshMessageRef(media, viaMessageId);
+    blob = ref ? await downloadPreviewBlob(media.client, ref) : null;
+  }
+  if (!blob) {
+    debug(
+      `media ${mediaId}: unresolvable (ref=${ref ? "yes" : "no"}, via=${viaMessageId ?? "none"})`,
+    );
+    return null;
+  }
   void saveBlob(key, blob);
   return { url: urlOf(blob), video: blob.video };
 }

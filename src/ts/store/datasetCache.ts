@@ -21,7 +21,7 @@ const BLOB_STORE = "blobs";
  * (e.g. media classification), so stale caches re-ingest instead of silently
  * serving data the fix never touched.
  */
-const INGEST_VERSION = 5;
+const INGEST_VERSION = 6;
 
 interface CachedEntry {
   version: number;
