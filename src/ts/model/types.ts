@@ -38,6 +38,18 @@ export type MediaType =
   | "document"
   | "other";
 
+/**
+ * One standard-emoji reaction tally on a message. `count` is the total number
+ * of that reaction; `you` marks whether one of them is yours (Telegram's
+ * `chosenOrder` flag). Custom/premium emoji reactions are not captured — they
+ * have no plain glyph to display.
+ */
+export interface MessageReaction {
+  emoticon: string;
+  count: number;
+  you: boolean;
+}
+
 export interface Message {
   id: string; // `${chatId}:${telegramMessageId}` — globally unique
   chatId: PeerId;
@@ -50,7 +62,8 @@ export interface Message {
   mediaType: MediaType;
   mediaId?: string; // document id for sticker/gif media — groups identical files
   replyToId?: string; // another Message.id
-  reactionCount: number;
+  reactionCount: number; // total incl. custom-emoji reactions
+  reactions?: MessageReaction[]; // standard-emoji tallies, when any
   editTimestamp?: number; // epoch ms, UTC
 }
 

@@ -134,6 +134,26 @@ describe("normalizeMessage", () => {
     expect(normalizeMessage(rawMessage()).replyToId).toBeUndefined();
   });
 
+  it("maps standard-emoji reactions when present", () => {
+    const withReactions = normalizeMessage(
+      rawMessage({
+        reactions: [
+          { emoticon: "❤️", count: 2, chosen: true },
+          { emoticon: "👍", count: 1, chosen: false },
+        ],
+      }),
+    );
+    expect(withReactions.reactions).toEqual([
+      { emoticon: "❤️", count: 2, you: true },
+      { emoticon: "👍", count: 1, you: false },
+    ]);
+
+    expect(normalizeMessage(rawMessage()).reactions).toBeUndefined();
+    expect(
+      normalizeMessage(rawMessage({ reactions: [] })).reactions,
+    ).toBeUndefined();
+  });
+
   it("converts editDate to ms only when present", () => {
     expect(
       normalizeMessage(rawMessage({ editDate: 1_700_000_500 })).editTimestamp,

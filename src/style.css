@@ -732,6 +732,47 @@ a:hover {
   color: var(--text-muted);
 }
 
+/* Greatest hits */
+
+.hits {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hit-count {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.hit-text {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.hit-meta {
+  font-size: 0.8rem;
+}
+
 /* Streaks */
 
 .stat-figures {

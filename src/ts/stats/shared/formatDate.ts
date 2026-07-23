@@ -16,6 +16,15 @@ export function formatMonth(period: string): string {
   return MONTH_FORMAT.format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
+/** Epoch ms → "Mar 14" in the given IANA timezone. */
+export function formatDay(timestamp: number, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone,
+  }).format(new Date(timestamp));
+}
+
 /** Whole-day elapsed count → "today", "yesterday", "3 days ago", "2 months ago". */
 export function formatRelativeDays(days: number): string {
   if (days <= 0) return "today";

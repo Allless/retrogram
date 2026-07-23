@@ -24,6 +24,13 @@ export interface RawPeer {
   memberCount?: number;
 }
 
+/** One standard-emoji reaction tally as extracted from gramjs. */
+export interface RawReaction {
+  emoticon: string;
+  count: number;
+  chosen: boolean; // the current account picked this reaction
+}
+
 /** Only the message fields ingestion actually extracts from gramjs. */
 export interface RawMessage {
   chatId: string;
@@ -36,6 +43,7 @@ export interface RawMessage {
   mediaId?: string; // document id for sticker/gif media
   replyToMessageId?: number;
   reactionCount?: number;
+  reactions?: RawReaction[];
   editDate?: number; // epoch SECONDS
 }
 
@@ -135,6 +143,13 @@ export function normalizeMessage(raw: RawMessage): Message {
 
   if (raw.mediaId !== undefined) {
     message.mediaId = raw.mediaId;
+  }
+  if (raw.reactions !== undefined && raw.reactions.length > 0) {
+    message.reactions = raw.reactions.map((r) => ({
+      emoticon: r.emoticon,
+      count: r.count,
+      you: r.chosen,
+    }));
   }
   if (raw.replyToMessageId !== undefined) {
     message.replyToId = `${raw.chatId}:${raw.replyToMessageId}`;

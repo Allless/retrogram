@@ -18,6 +18,7 @@ import {
   normalizePeerToContact,
   type RawMessage,
   type RawPeer,
+  type RawReaction,
 } from "./normalize";
 
 export interface IngestOptions {
@@ -113,6 +114,33 @@ function reactionCountOf(record: Record<string, unknown>): number {
   }, 0);
 }
 
+/**
+ * Standard-emoji reaction tallies. `chosenOrder` is present exactly when the
+ * current account picked that reaction. Custom/premium emoji reactions
+ * (`ReactionCustomEmoji`) carry a document id instead of a glyph — skipped.
+ */
+function reactionsOf(
+  record: Record<string, unknown>,
+): RawReaction[] | undefined {
+  const results = asRecord(record.reactions)?.results;
+  if (!Array.isArray(results)) return undefined;
+
+  const reactions: RawReaction[] = [];
+  for (const entry of results) {
+    const result = asRecord(entry);
+    if (!result) continue;
+    const emoticon = readString(asRecord(result.reaction)?.emoticon);
+    const count = readNumber(result.count) ?? 0;
+    if (!emoticon || count <= 0) continue;
+    reactions.push({
+      emoticon,
+      count,
+      chosen: result.chosenOrder !== undefined && result.chosenOrder !== null,
+    });
+  }
+  return reactions.length > 0 ? reactions : undefined;
+}
+
 function toRawMessage(
   raw: unknown,
   chatId: PeerId,
@@ -146,6 +174,11 @@ function toRawMessage(
     media: mediaKindOf(media),
     reactionCount: reactionCountOf(record),
   };
+
+  const reactions = reactionsOf(record);
+  if (reactions !== undefined) {
+    rawMessage.reactions = reactions;
+  }
 
   const documentId = readString(asRecord(media?.document)?.id);
   if (documentId !== undefined) {

@@ -8,6 +8,8 @@ import { register } from "./registry";
 import { activityHeatmap } from "./activityHeatmap";
 import { emojiFrequency } from "./emojiFrequency";
 import { ghostedChats } from "./ghostedChats";
+import { greatestHits } from "./greatestHits";
+import { reactions } from "./reactions";
 import { responseTimes } from "./responseTimes";
 import { streaks } from "./streaks";
 import { topDms, topGroups } from "./topContacts";
@@ -24,5 +26,7 @@ export const STAT_REGISTRY: RegisteredStat[] = [
   register(responseTimes),
   register(ghostedChats),
   register(emojiFrequency),
+  register(reactions),
+  register(greatestHits),
   register(streaks),
 ];
