@@ -1,13 +1,20 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 
 import { QrConnect } from "./auth/QrConnect";
 import { clearSession } from "./auth/qrLogin";
 import { Dashboard } from "./dashboard/Dashboard";
+import { SharedReport } from "./dashboard/SharedReport";
 import { fetchPeerRefs, ingest } from "./ingestion/ingest";
+import { decryptText } from "./share/crypto";
+import { inflateText, parseShareHash } from "./share/link";
+import { isSharedSummary } from "./share/summary";
+import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
 
 import type { MediaRefs, PeerRefs } from "./ingestion/ingest";
+import type { ShareRef } from "./share/link";
+import type { SharedSummary } from "./share/summary";
 import type { TelegramClient } from "telegram";
 import type { Dataset } from "./model/types";
 
@@ -33,6 +40,44 @@ export function App() {
   const [peerRefs, setPeerRefs] = useState<PeerRefs>(new Map());
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Opened via a share link? Render the shared summary instead of the login
+  // flow — no Telegram session needed for viewing.
+  const [shareRef, setShareRef] = useState<ShareRef | null>(() =>
+    parseShareHash(location.hash),
+  );
+  const [sharedSummary, setSharedSummary] = useState<SharedSummary | null>(
+    null,
+  );
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!shareRef) return;
+    let cancelled = false;
+    setSharedSummary(null);
+    setShareError(null);
+    loadSharedSummary(shareRef)
+      .then((summary) => {
+        if (!cancelled) setSharedSummary(summary);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setShareError(
+            err instanceof Error ? err.message : "Couldn't load this share.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shareRef]);
+
+  const exitShared = () => {
+    history.replaceState(null, "", location.pathname + location.search);
+    setShareRef(null);
+    setSharedSummary(null);
+    setShareError(null);
+  };
 
   const handleConnected = async (connected: TelegramClient) => {
     setStatus("loading");
@@ -86,9 +131,28 @@ export function App() {
       </header>
 
       <main>
-        {status === "connect" && <QrConnect onConnected={handleConnected} />}
+        {shareRef && shareError && (
+          <div class="error-panel">
+            <p>{shareError}</p>
+            <button type="button" class="btn-secondary" onClick={exitShared}>
+              Go to Retrogram
+            </button>
+          </div>
+        )}
 
-        {status === "loading" && (
+        {shareRef && !shareError && !sharedSummary && (
+          <p class="muted">Loading shared report…</p>
+        )}
+
+        {shareRef && !shareError && sharedSummary && (
+          <SharedReport summary={sharedSummary} onMakeYourOwn={exitShared} />
+        )}
+
+        {!shareRef && status === "connect" && (
+          <QrConnect onConnected={handleConnected} />
+        )}
+
+        {!shareRef && status === "loading" && (
           <div class="muted">
             <p>
               Reading your Telegram history (last 12 months) on this device…
@@ -104,7 +168,7 @@ export function App() {
           </div>
         )}
 
-        {status === "error" && (
+        {!shareRef && status === "error" && (
           <div class="error-panel">
             <p>{error}</p>
             <button
@@ -117,7 +181,7 @@ export function App() {
           </div>
         )}
 
-        {status === "ready" && dataset && (
+        {!shareRef && status === "ready" && dataset && (
           <Dashboard
             dataset={dataset}
             media={media}
@@ -150,6 +214,19 @@ export function App() {
       </footer>
     </div>
   );
+}
+
+/** Resolve a share link to its summary: fetch+decrypt, or inflate inline data. */
+async function loadSharedSummary(ref: ShareRef): Promise<SharedSummary> {
+  const json =
+    ref.kind === "inline"
+      ? await inflateText(ref.data)
+      : await decryptText(await fetchShare(ref.path), ref.key);
+  const parsed: unknown = JSON.parse(json);
+  if (!isSharedSummary(parsed)) {
+    throw new Error("This link doesn't contain a valid Retrogram share.");
+  }
+  return parsed;
 }
 
 /** Reuse the cached dataset for this account if present, else ingest and cache. */

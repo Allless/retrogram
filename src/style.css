@@ -326,6 +326,38 @@ a:hover {
   gap: 16px;
 }
 
+/* Share */
+
+.share-panel {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.share-panel > .muted {
+  font-size: 0.82rem;
+}
+
+.share-url {
+  font-size: 0.75rem;
+  word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.share-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* Slides */
 
 .slide-card {

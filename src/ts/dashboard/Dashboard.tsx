@@ -10,6 +10,7 @@ import { STAT_REGISTRY } from "../stats/allStats";
 import { AvatarContext, type AvatarSource } from "../media/avatars";
 import { getAvatarUrl } from "../media/downloadMedia";
 import { MediaStat } from "./MediaStat";
+import { SharePanel } from "./SharePanel";
 
 import type { ComponentChildren } from "preact";
 import type { MediaContext } from "../media/downloadMedia";
@@ -155,6 +156,8 @@ export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
           device{dataset.meta.partial ? " (partial history)" : ""}. Nothing was
           uploaded.
         </p>
+
+        <SharePanel dataset={dataset} />
 
         <div class="story-bar" role="tablist" aria-label="Stats slides">
           {slides.map((s, i) => (
