@@ -26,15 +26,25 @@ export interface QrLoginOptions {
   onError: (err: Error) => Promise<boolean> | boolean;
   /** Supplies the 2FA password when the account has one set. */
   password?: () => Promise<string>;
+  /** Handle to the underlying client, so the caller can disconnect a flow it abandons. */
+  onClient?: (client: TelegramClient) => void;
 }
 
-/**
- * Start the QR-login flow. Resolves with the connected client once the user has
- * authorized the session from their Telegram app.
- */
-export async function startQrLogin(
-  opts: QrLoginOptions,
-): Promise<TelegramClient> {
+export interface PhoneLoginOptions {
+  /** Supplies the phone number (international format). Re-called if invalid. */
+  phoneNumber: () => Promise<string>;
+  /** Supplies the login code Telegram sends. Re-called if wrong. */
+  phoneCode: () => Promise<string>;
+  /** Supplies the 2FA password when the account has one set. */
+  password: () => Promise<string>;
+  /** Called on a login error. Return `true` to stop retrying, `false` to continue. */
+  onError: (err: Error) => Promise<boolean> | boolean;
+  /** Handle to the underlying client, so the caller can disconnect a flow it abandons. */
+  onClient?: (client: TelegramClient) => void;
+}
+
+/** Connect a client on the saved session (or a fresh one). */
+async function connectClient(): Promise<TelegramClient> {
   if (!API_ID || !API_HASH) {
     throw new Error(
       "Missing VITE_TG_API_ID / VITE_TG_API_HASH — register an app at my.telegram.org.",
@@ -50,6 +60,18 @@ export async function startQrLogin(
   });
 
   await client.connect();
+  return client;
+}
+
+/**
+ * Start the QR-login flow. Resolves with the connected client once the user has
+ * authorized the session from their Telegram app.
+ */
+export async function startQrLogin(
+  opts: QrLoginOptions,
+): Promise<TelegramClient> {
+  const client = await connectClient();
+  opts.onClient?.(client);
 
   // Resume silently if the stored session is still authorized — no QR needed.
   if (await client.checkAuthorization()) {
@@ -63,6 +85,38 @@ export async function startQrLogin(
       qrCode: async (code) => opts.onLoginUrl(buildLoginLink(code.token)),
       onError: async (err) => opts.onError(err),
       password: opts.password,
+    },
+  );
+
+  persistSession(client.session.save());
+  return client;
+}
+
+/**
+ * Start the phone-number login flow (sendCode → code → optional 2FA). The
+ * callbacks are awaited as gramjs walks the flow, so the UI drives each step
+ * by resolving them. This is the primary path on mobile, where Telegram
+ * deliberately won't confirm a same-device `tg://login` deep link.
+ */
+export async function startPhoneLogin(
+  opts: PhoneLoginOptions,
+): Promise<TelegramClient> {
+  const client = await connectClient();
+  opts.onClient?.(client);
+
+  // Resume silently if the stored session is still authorized.
+  if (await client.checkAuthorization()) {
+    persistSession(client.session.save());
+    return client;
+  }
+
+  await client.signInUser(
+    { apiId: API_ID, apiHash: API_HASH },
+    {
+      phoneNumber: opts.phoneNumber,
+      phoneCode: opts.phoneCode,
+      password: opts.password,
+      onError: async (err) => opts.onError(err),
     },
   );
 
