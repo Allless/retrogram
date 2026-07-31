@@ -7,6 +7,7 @@ import {
 } from "preact/hooks";
 
 import { STAT_REGISTRY } from "../stats/allStats";
+import { formatRelativeDays } from "../stats/shared/formatDate";
 import { AvatarContext, type AvatarSource } from "../media/avatars";
 import { getAvatarUrl, getHitPreview } from "../media/downloadMedia";
 import { HitPreviewContext, type HitPreviewSource } from "../media/hitPreviews";
@@ -16,6 +17,8 @@ import { SharePanel } from "./SharePanel";
 import type { ComponentChildren } from "preact";
 import type { MediaContext, MediaPreview } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
+
+const DAY_MS = 86_400_000;
 
 interface Slide {
   id: string;
@@ -118,6 +121,7 @@ function HitPreviewProvider({
 interface DashboardProps {
   dataset: Dataset;
   media: MediaContext | null;
+  onRefresh: () => void;
   onDisconnect: () => void;
 }
 
@@ -127,7 +131,12 @@ interface DashboardProps {
  * computes and renders itself; the dashboard only frames them. Nothing here
  * talks to Telegram except the on-demand media/avatar downloads.
  */
-export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
+export function Dashboard({
+  dataset,
+  media,
+  onRefresh,
+  onDisconnect,
+}: DashboardProps) {
   const slides: Slide[] = [
     ...STAT_REGISTRY.map((stat) => ({
       id: stat.id,
@@ -211,6 +220,14 @@ export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
               <button
                 type="button"
                 class="btn-secondary"
+                title="Re-read your Telegram history and recompute all stats"
+                onClick={onRefresh}
+              >
+                Refresh data
+              </button>
+              <button
+                type="button"
+                class="btn-secondary"
                 onClick={onDisconnect}
               >
                 Disconnect
@@ -220,8 +237,12 @@ export function Dashboard({ dataset, media, onDisconnect }: DashboardProps) {
 
           <p class="muted">
             {dataset.meta.messageCount.toLocaleString()} messages analyzed on
-            your device{dataset.meta.partial ? " (partial history)" : ""}.
-            Nothing was uploaded.
+            your device{dataset.meta.partial ? " (partial history)" : ""},
+            fetched{" "}
+            {formatRelativeDays(
+              Math.floor((Date.now() - dataset.meta.fetchedAt) / DAY_MS),
+            )}
+            . Nothing was uploaded.
           </p>
 
           <div class="story-bar" role="tablist" aria-label="Stats slides">

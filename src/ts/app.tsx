@@ -106,6 +106,37 @@ export function App() {
     }
   };
 
+  // Re-ingest from Telegram, bypassing the cached dataset — the cache never
+  // expires on its own, so this is how stale results get recomputed. The old
+  // cache entry is kept until the new ingest succeeds and overwrites it, so
+  // an interrupted refresh doesn't lose the existing results.
+  const handleRefresh = async () => {
+    if (!client) return;
+    setStatus("loading");
+    setError(null);
+    setProgress(null);
+    try {
+      const {
+        dataset: data,
+        mediaRefs: refs,
+        peerRefs: peers,
+        hitRefs: hits,
+      } = await ingestFresh(client, setProgress);
+      setDataset(data);
+      setMediaRefs(refs);
+      setPeerRefs(peers);
+      setHitRefs(hits);
+      setStatus("ready");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Couldn't read your Telegram data.",
+      );
+      setStatus("error");
+    }
+  };
+
   const handleDisconnect = () => {
     void clearDataset();
     clearSession();
@@ -200,6 +231,7 @@ export function App() {
           <Dashboard
             dataset={dataset}
             media={media}
+            onRefresh={() => void handleRefresh()}
             onDisconnect={handleDisconnect}
           />
         )}
@@ -273,6 +305,19 @@ async function loadOrIngest(
     };
   }
 
+  return ingestFresh(client, onProgress);
+}
+
+/** Ingest from Telegram and cache the result. */
+async function ingestFresh(
+  client: TelegramClient,
+  onProgress: (p: Progress) => void,
+): Promise<{
+  dataset: Dataset;
+  mediaRefs: MediaRefs;
+  peerRefs: PeerRefs;
+  hitRefs: HitRefs;
+}> {
   const result = await ingest(client, { onProgress });
   await saveDataset(result.dataset);
   return result;
