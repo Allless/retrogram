@@ -8,12 +8,14 @@
 import { createContext } from "preact";
 import { useContext, useEffect } from "preact/hooks";
 
+import { SlidePriorityContext } from "./slidePriority";
+
 import type { ComponentChildren } from "preact";
 import type { MediaPreview } from "./downloadMedia";
 
 export interface HitPreviewSource {
   /** Ask for a message's media preview; a no-op without a live client. */
-  request: (messageId: string) => void;
+  request: (messageId: string, priority?: number) => void;
   /** messageId → preview, null when unavailable. */
   previews: Record<string, MediaPreview | null>;
 }
@@ -31,7 +33,8 @@ export function HitMedia({
   fallback?: ComponentChildren;
 }) {
   const { request, previews } = useContext(HitPreviewContext);
-  useEffect(() => request(messageId), [messageId, request]);
+  const priority = useContext(SlidePriorityContext);
+  useEffect(() => request(messageId, priority), [messageId, priority, request]);
 
   const preview = previews[messageId];
   if (!preview) return <>{fallback ?? null}</>;

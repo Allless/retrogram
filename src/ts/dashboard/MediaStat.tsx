@@ -1,7 +1,9 @@
-import { useEffect, useState } from "preact/hooks";
+import { useContext, useEffect, useState } from "preact/hooks";
 
 import { topMediaByType } from "../stats/topMedia";
 import { getMediaPreview } from "../media/downloadMedia";
+import { enqueueFetch } from "../media/fetchQueue";
+import { SlidePriorityContext } from "../media/slidePriority";
 
 import type { MediaContext, MediaPreview } from "../media/downloadMedia";
 import type { Dataset, MediaType } from "../model/types";
@@ -28,6 +30,7 @@ export function MediaStat({
   emptyLabel,
 }: MediaStatProps) {
   const items = topMediaByType(dataset, mediaType, TOP);
+  const priority = useContext(SlidePriorityContext);
   const [previews, setPreviews] = useState<Record<string, MediaPreview | null>>(
     {},
   );
@@ -47,10 +50,8 @@ export function MediaStat({
 
     void (async () => {
       for (const { mediaId } of topMediaByType(dataset, mediaType, TOP)) {
-        const preview = await getMediaPreview(
-          media,
-          mediaId,
-          messageByMedia.get(mediaId),
+        const preview = await enqueueFetch(priority, () =>
+          getMediaPreview(media, mediaId, messageByMedia.get(mediaId)),
         );
         if (cancelled) {
           if (preview) URL.revokeObjectURL(preview.url);
@@ -65,7 +66,7 @@ export function MediaStat({
       cancelled = true;
       for (const url of created) URL.revokeObjectURL(url);
     };
-  }, [dataset, media, mediaType]);
+  }, [dataset, media, mediaType, priority]);
 
   if (items.length === 0) {
     return <p class="muted">{emptyLabel}</p>;

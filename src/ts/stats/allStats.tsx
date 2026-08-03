@@ -27,6 +27,6 @@ export const STAT_REGISTRY: RegisteredStat[] = [
   register(ghostedChats),
   register(emojiFrequency),
   register(reactions),
-  register(greatestHits),
   register(streaks),
+  register(greatestHits),
 ];

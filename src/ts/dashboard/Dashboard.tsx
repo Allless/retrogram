@@ -10,7 +10,9 @@ import { STAT_REGISTRY } from "../stats/allStats";
 import { formatRelativeDays } from "../stats/shared/formatDate";
 import { AvatarContext, type AvatarSource } from "../media/avatars";
 import { getAvatarUrl, getHitPreview } from "../media/downloadMedia";
+import { enqueueFetch, focusFetchPriority } from "../media/fetchQueue";
 import { HitPreviewContext, type HitPreviewSource } from "../media/hitPreviews";
+import { SlidePriorityContext } from "../media/slidePriority";
 import { MediaStat } from "./MediaStat";
 import { SharePanel } from "./SharePanel";
 
@@ -99,13 +101,15 @@ function AvatarProvider({
   );
 
   const request = useCallback(
-    (peerId: string) => {
+    (peerId: string, priority = 0) => {
       if (requested.current.has(peerId)) return;
       requested.current.add(peerId);
-      void getAvatarUrl(media, peerId).then((url) => {
-        if (url) created.current.push(url);
-        setUrls((prev) => ({ ...prev, [peerId]: url }));
-      });
+      void enqueueFetch(priority, () => getAvatarUrl(media, peerId)).then(
+        (url) => {
+          if (url) created.current.push(url);
+          setUrls((prev) => ({ ...prev, [peerId]: url }));
+        },
+      );
     },
     [media],
   );
@@ -142,13 +146,15 @@ function HitPreviewProvider({
   );
 
   const request = useCallback(
-    (messageId: string) => {
+    (messageId: string, priority = 0) => {
       if (requested.current.has(messageId)) return;
       requested.current.add(messageId);
-      void getHitPreview(media, messageId).then((preview) => {
-        if (preview) created.current.push(preview.url);
-        setPreviews((prev) => ({ ...prev, [messageId]: preview }));
-      });
+      void enqueueFetch(priority, () => getHitPreview(media, messageId)).then(
+        (preview) => {
+          if (preview) created.current.push(preview.url);
+          setPreviews((prev) => ({ ...prev, [messageId]: preview }));
+        },
+      );
     },
     [media],
   );
@@ -165,32 +171,18 @@ function HitPreviewProvider({
   );
 }
 
-interface DashboardProps {
-  dataset: Dataset;
-  media: MediaContext | null;
-  onRefresh: () => void;
-  onDisconnect: () => void;
-}
+/** Every slide in deck order: registry stats with the sticker/GIF slides
+ * spliced into the expression cluster (before `streaks` → `greatest-hits`,
+ * the finale), and Share last. */
+function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
+  const statSlides: Slide[] = STAT_REGISTRY.map((stat) => ({
+    id: stat.id,
+    title: stat.title,
+    description: stat.description,
+    content: <stat.Render dataset={dataset} />,
+  }));
 
-/**
- * Presents every registered stat as a slide deck — one category per slide,
- * navigable with the buttons, the dots, or the arrow keys. Each stat module
- * computes and renders itself; the dashboard only frames them. Nothing here
- * talks to Telegram except the on-demand media/avatar downloads.
- */
-export function Dashboard({
-  dataset,
-  media,
-  onRefresh,
-  onDisconnect,
-}: DashboardProps) {
-  const slides: Slide[] = [
-    ...STAT_REGISTRY.map((stat) => ({
-      id: stat.id,
-      title: stat.title,
-      description: stat.description,
-      content: <stat.Render dataset={dataset} />,
-    })),
+  const mediaSlides: Slide[] = [
     {
       id: "top-stickers",
       title: "Top stickers",
@@ -217,6 +209,14 @@ export function Dashboard({
         />
       ),
     },
+  ];
+
+  const foundStreaks = statSlides.findIndex((s) => s.id === "streaks");
+  const streaksAt = foundStreaks === -1 ? statSlides.length : foundStreaks;
+  return [
+    ...statSlides.slice(0, streaksAt),
+    ...mediaSlides,
+    ...statSlides.slice(streaksAt),
     {
       id: "share",
       title: "Share your year",
@@ -225,30 +225,101 @@ export function Dashboard({
       content: <SharePanel dataset={dataset} media={media} />,
     },
   ];
+}
 
+interface DashboardProps {
+  dataset: Dataset;
+  media: MediaContext | null;
+  onRefresh: () => void;
+  onDisconnect: () => void;
+}
+
+/**
+ * Presents every registered stat as a slide deck — one category per slide,
+ * navigable with the buttons, the dots, or the arrow keys. Each stat module
+ * computes and renders itself; the dashboard only frames them. Nothing here
+ * talks to Telegram except the on-demand media/avatar downloads.
+ */
+export function Dashboard({
+  dataset,
+  media,
+  onRefresh,
+  onDisconnect,
+}: DashboardProps) {
+  // Memoized so navigation re-renders only the frame — re-rendering every
+  // mounted slide per index change recomputes all stats and stalls scrolling.
+  const slides = useMemo(() => buildSlides(dataset, media), [dataset, media]);
+
+  // `index` mirrors the scroll position; goTo() drives the scroll — buttons,
+  // dots, and arrow keys all funnel through it.
   const [index, setIndex] = useState(0);
   const count = slides.length;
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  // Uniform slides: total scrollable distance splits evenly between them.
+  const slideStep = (track: HTMLDivElement) =>
+    count > 1 ? (track.scrollWidth - track.clientWidth) / (count - 1) : 1;
+
   const goTo = useCallback(
     (target: number) => {
-      setIndex(Math.max(0, Math.min(count - 1, target)));
+      const clamped = Math.max(0, Math.min(count - 1, target));
+      const track = trackRef.current;
+      if (track) {
+        track.scrollTo({
+          left: clamped * slideStep(track),
+          behavior: "smooth",
+        });
+      }
+      setIndex(clamped);
     },
     [count],
   );
 
+  const onTrackScroll = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const at = Math.round(track.scrollLeft / slideStep(track));
+    setIndex(Math.max(0, Math.min(count - 1, at)));
+  };
+
+  // Chrome announces the pending snap target mid-gesture, letting the story
+  // bar lead the animation; elsewhere onTrackScroll's rounding updates it.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onSnapChanging = (event: Event) => {
+      const target = (event as { snapTargetInline?: Element | null })
+        .snapTargetInline;
+      const at = target
+        ? Array.prototype.indexOf.call(track.children, target)
+        : -1;
+      if (at >= 0) setIndex(at);
+    };
+    track.addEventListener("scrollsnapchanging", onSnapChanging);
+    return () =>
+      track.removeEventListener("scrollsnapchanging", onSnapChanging);
+  }, []);
+
+  const current = Math.min(index, count - 1);
+  const indexRef = useRef(current);
+  indexRef.current = current;
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "ArrowRight") {
-        setIndex((i) => Math.min(count - 1, i + 1));
+        goTo(indexRef.current + 1);
       } else if (event.key === "ArrowLeft") {
-        setIndex((i) => Math.max(0, i - 1));
+        goTo(indexRef.current - 1);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [count]);
+  }, [goTo]);
 
-  const current = Math.min(index, count - 1);
-  const slide = slides[current];
+  // The visible slide's pending media downloads jump the queue.
+  useEffect(() => {
+    focusFetchPriority(current);
+  }, [current]);
 
   return (
     <AvatarProvider media={media}>
@@ -313,13 +384,19 @@ export function Dashboard({
             ))}
           </div>
 
-          <article class="stat-card slide-card" key={slide.id}>
-            <header class="stat-card-head">
-              <h3>{slide.title}</h3>
-              <p class="muted">{slide.description}</p>
-            </header>
-            {slide.content}
-          </article>
+          <div class="slide-track" ref={trackRef} onScroll={onTrackScroll}>
+            {slides.map((s, i) => (
+              <article class="stat-card slide-card" key={s.id}>
+                <header class="stat-card-head">
+                  <h3>{s.title}</h3>
+                  <p class="muted">{s.description}</p>
+                </header>
+                <SlidePriorityContext.Provider value={i}>
+                  {s.content}
+                </SlidePriorityContext.Provider>
+              </article>
+            ))}
+          </div>
 
           <nav class="slide-nav" aria-label="Slide navigation">
             <button

@@ -9,9 +9,11 @@
 import { createContext } from "preact";
 import { useContext, useEffect } from "preact/hooks";
 
+import { SlidePriorityContext } from "./slidePriority";
+
 export interface AvatarSource {
   /** Ask for a peer's profile photo; a no-op without a live client. */
-  request: (peerId: string) => void;
+  request: (peerId: string, priority?: number) => void;
   /** peerId → object URL, or null when the download failed/unavailable. */
   urls: Record<string, string | null>;
 }
@@ -40,7 +42,8 @@ export function avatarHue(title: string): number {
 
 export function Avatar({ peerId, title }: { peerId: string; title: string }) {
   const { request, urls } = useContext(AvatarContext);
-  useEffect(() => request(peerId), [peerId, request]);
+  const priority = useContext(SlidePriorityContext);
+  useEffect(() => request(peerId, priority), [peerId, priority, request]);
 
   const url = urls[peerId];
   if (url) {
