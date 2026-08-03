@@ -15,59 +15,15 @@ import { HitPreviewContext, type HitPreviewSource } from "../media/hitPreviews";
 import { SlidePriorityContext } from "../media/slidePriority";
 import { MediaStat } from "./MediaStat";
 import { SharePanel } from "./SharePanel";
+import ShareIcon from "../../icons/share.svg?react";
+import RefreshIcon from "../../icons/refresh.svg?react";
+import LogoutIcon from "../../icons/logout.svg?react";
 
 import type { ComponentChildren } from "preact";
 import type { MediaContext, MediaPreview } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
 
 const DAY_MS = 86_400_000;
-
-function IconBase({ children }: { children: ComponentChildren }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function ShareIcon() {
-  return (
-    <IconBase>
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-      <polyline points="16 6 12 2 8 6" />
-      <line x1="12" y1="2" x2="12" y2="15" />
-    </IconBase>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <IconBase>
-      <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
-      <polyline points="21 3 21 8 16 8" />
-    </IconBase>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <IconBase>
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </IconBase>
-  );
-}
 
 interface Slide {
   id: string;

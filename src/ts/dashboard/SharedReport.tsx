@@ -5,7 +5,7 @@ import { reactions } from "../stats/reactions";
 import { responseTimes } from "../stats/responseTimes";
 import { streaks } from "../stats/streaks";
 import { volumeOverTime } from "../stats/volumeOverTime";
-import { RewindGlyph } from "../rewindGlyph";
+import RewindGlyph from "../../rewind.svg?react";
 
 import type { SharedSummary, SharedTopMedia } from "../share/summary";
 

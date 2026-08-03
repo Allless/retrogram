@@ -4,16 +4,9 @@ import "@fontsource/fraunces/700.css";
 import { render } from "preact";
 
 import { App } from "./app";
+import { initTheme } from "./theme";
 
-// Themes are CSS-only: stamping the root element activates the overrides in
-// style.css. Query param wins over the ThemePicker's stored choice.
-const theme =
-  new URLSearchParams(location.search).get("theme") ??
-  localStorage.getItem("retrogram.theme") ??
-  "rewind-amber";
-if (theme !== "default") {
-  document.documentElement.dataset.theme = theme;
-}
+initTheme();
 
 const root = document.getElementById("app");
 if (root) {

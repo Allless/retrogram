@@ -3,6 +3,7 @@ import { execSync } from "child_process";
 import { resolve } from "path";
 import preact from "@preact/preset-vite";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
+import svgr from "vite-plugin-svgr";
 
 /** Deployed commit, injected so the footer can link the exact source build. */
 function commitHash(): string {
@@ -44,7 +45,7 @@ export default defineConfig({
   root: "src",
   // Load .env from the project root, not from `root` (src), which is Vite's default.
   envDir: __dirname,
-  plugins: [preact(), nodePolyfills(), dedupeBufferShim()],
+  plugins: [preact(), svgr(), nodePolyfills(), dedupeBufferShim()],
   appType: "mpa",
   build: {
     outDir: "../dist",

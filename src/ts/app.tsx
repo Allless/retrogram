@@ -11,7 +11,8 @@ import { isSharedSummary } from "./share/summary";
 import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
-import { RewindGlyph } from "./rewindGlyph";
+import Logo from "../telegram-rewind.svg?react";
+import { getSchemePref, setSchemePref, type SchemePref } from "./theme";
 
 import type { HitRefs, MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { ShareRef } from "./share/link";
@@ -35,54 +36,37 @@ interface Progress {
  */
 export function App() {
   // Dev-only: `?fixture` renders the dashboard with the sample dataset.
-  const inner =
-    import.meta.env.DEV && location.search.includes("fixture") ? (
-      <FixtureApp />
-    ) : (
-      <ConnectedApp />
-    );
-  return (
-    <>
-      {inner}
-      <ThemePicker />
-    </>
-  );
+  if (import.meta.env.DEV && location.search.includes("fixture")) {
+    return <FixtureApp />;
+  }
+  return <ConnectedApp />;
 }
 
-const THEMES = [
-  "default",
-  "telegram",
-  "telegram-day",
-  "rewind",
-  "rewind-amber",
-  "rewind-blue",
-];
-
-/** TEMPORARY theme switcher — remove with its styles and the main.tsx
- * localStorage fallback once a theme is chosen. */
-function ThemePicker() {
-  const onChange = (event: Event) => {
-    const value = (event.currentTarget as HTMLSelectElement).value;
-    localStorage.setItem("retrogram.theme", value);
-    if (value === "default") {
-      delete document.documentElement.dataset.theme;
-    } else {
-      document.documentElement.dataset.theme = value;
-    }
+/** Day/night override, following the browser scheme by default. */
+function SchemeToggle() {
+  const [pref, setPref] = useState<SchemePref>(getSchemePref);
+  const choose = (next: SchemePref) => {
+    setSchemePref(next);
+    setPref(next);
   };
   return (
-    <select
-      class="theme-picker"
-      aria-label="Theme (temporary)"
-      value={document.documentElement.dataset.theme ?? "default"}
-      onChange={onChange}
-    >
-      {THEMES.map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
+    <span class="scheme-toggle" role="group" aria-label="Color scheme">
+      {(["auto", "light", "dark"] as const).map((option) => (
+        <button
+          type="button"
+          key={option}
+          class={
+            option === pref
+              ? "scheme-option scheme-option-active"
+              : "scheme-option"
+          }
+          aria-pressed={option === pref}
+          onClick={() => choose(option)}
+        >
+          {option}
+        </button>
       ))}
-    </select>
+    </span>
   );
 }
 
@@ -239,7 +223,7 @@ function ConnectedApp() {
               if (shareRef) exitShared();
             }}
           >
-            <RewindGlyph class="wordmark-rewind" />
+            <Logo class="wordmark-logo" />
             Retrogram
           </a>
         </h1>
@@ -327,6 +311,8 @@ function ConnectedApp() {
               </a>
             </>
           )}
+          {" · Theme: "}
+          <SchemeToggle />
         </p>
       </footer>
     </div>
