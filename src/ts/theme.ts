@@ -36,6 +36,11 @@ export function isDarkApplied(): boolean {
   return document.documentElement.dataset.theme === "telegram";
 }
 
+/** The browser's own preference, ignoring any stored override. */
+export function browserPrefersDark(): boolean {
+  return media().matches;
+}
+
 /** Notify on browser scheme changes (relevant while the pref is "auto"). */
 export function onSchemeChange(callback: () => void): () => void {
   media().addEventListener("change", callback);

@@ -20,7 +20,12 @@ import RefreshIcon from "../../icons/refresh.svg?react";
 import LogoutIcon from "../../icons/logout.svg?react";
 import BulbIcon from "../../icons/bulb.svg?react";
 import MoonIcon from "../../icons/moon.svg?react";
-import { isDarkApplied, onSchemeChange, setSchemePref } from "../theme";
+import {
+  browserPrefersDark,
+  isDarkApplied,
+  onSchemeChange,
+  setSchemePref,
+} from "../theme";
 
 import type { ComponentChildren } from "preact";
 import type { MediaContext, MediaPreview } from "../media/downloadMedia";
@@ -40,8 +45,15 @@ function ThemeToggle() {
   const [dark, setDark] = useState(isDarkApplied);
   useEffect(() => onSchemeChange(() => setDark(isDarkApplied())), []);
   const flip = () => {
-    setSchemePref(dark ? "light" : "dark");
-    setDark(!dark);
+    const targetDark = !dark;
+    // Smart reset: landing on the browser's own scheme means "auto" — only
+    // deliberate disagreement with the system is stored.
+    if (targetDark === browserPrefersDark()) {
+      setSchemePref("auto");
+    } else {
+      setSchemePref(targetDark ? "dark" : "light");
+    }
+    setDark(targetDark);
   };
   const target = dark ? "light" : "dark";
   return (
