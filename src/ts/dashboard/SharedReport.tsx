@@ -5,6 +5,7 @@ import { reactions } from "../stats/reactions";
 import { responseTimes } from "../stats/responseTimes";
 import { streaks } from "../stats/streaks";
 import { volumeOverTime } from "../stats/volumeOverTime";
+import { RewindGlyph } from "../rewindGlyph";
 
 import type { SharedSummary, SharedTopMedia } from "../share/summary";
 
@@ -65,7 +66,7 @@ export function SharedReport({
       <div class="dashboard-head">
         <h2>A shared Telegram year</h2>
         <button type="button" class="btn-primary" onClick={onMakeYourOwn}>
-          Make your own ◀◀
+          Make your own <RewindGlyph class="btn-glyph" />
         </button>
       </div>
 

@@ -13,8 +13,10 @@
 /* Retro-print: warm paper, ink text, burnt-coral accent, deep-teal support.
    Dark mode is "midnight print" — the same inks on a night-navy stock. */
 :root {
-  --accent: #c9502c;
-  --accent-bright: #de6237;
+  /* WCAG-checked: ≥4.5:1 as link text on --bg and for --accent-contrast
+     text on accent-filled buttons (hover darkens — lightening fails 4.5). */
+  --accent: #b84725;
+  --accent-bright: #a53e1e;
   --accent-contrast: #fff8ec;
   --accent-2: #22696a;
 
@@ -37,6 +39,8 @@
   :root {
     --accent: #e0663f;
     --accent-bright: #ec7850;
+    /* Cream text on this orange is 3.2:1 — dark text passes at 5.1:1. */
+    --accent-contrast: #2a130b;
     --accent-2: #4fae9f;
 
     --bg: #12151f;
@@ -49,8 +53,119 @@
   }
 }
 
+/* Alternate themes, selected via `?theme=` (see main.tsx). The "rewind"
+   family: dark charcoal, mono display type, phosphor/amber/blue accents. */
+:root[data-theme="rewind"],
+:root[data-theme="rewind-amber"],
+:root[data-theme="rewind-blue"] {
+  --accent-2: #3390ec;
+
+  --bg: #0e1116;
+  --surface: #151a21;
+  --surface-alt: #1d242e;
+  --text: #e6edf3;
+  --text-muted: #8b98a5;
+  --border: #283039;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  --font-display:
+    ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+}
+
+:root[data-theme="rewind"] {
+  /* In the dark-mode lightness band so accent-tinted marks don't glow neon. */
+  --accent: #22a89a;
+  --accent-bright: #3ebbac;
+  --accent-contrast: #06211f;
+}
+
+:root[data-theme="rewind-amber"] {
+  --accent: #ffb454;
+  --accent-bright: #ffc878;
+  --accent-contrast: #241503;
+}
+
+/* "telegram": Telegram Desktop's night palette — surfaces verbatim, their
+   blue lightened 10% to pass 4.5:1 as text, sans display type. */
+:root[data-theme="telegram"] {
+  --accent: #479bee;
+  --accent-bright: #6ab3f3;
+  --accent-contrast: #0c1723;
+  --accent-2: #479bee;
+
+  --bg: #0e1621;
+  --surface: #17212b;
+  --surface-alt: #232e3c;
+  --text: #f5f5f5;
+  --text-muted: #8b9aac;
+  --border: #2b3a4d;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  --font-display: var(--font);
+  color-scheme: dark;
+}
+
+/* "telegram-day": the light client — white cards on the gray-blue backdrop,
+   classic #168acd blue darkened one step for contrast. */
+:root[data-theme="telegram-day"] {
+  --accent: #1274ac;
+  --accent-bright: #168acd;
+  --accent-contrast: #ffffff;
+  --accent-2: #1274ac;
+
+  --bg: #eef2f5;
+  --surface: #ffffff;
+  --surface-alt: #f1f4f8;
+  --text: #1c2732;
+  --text-muted: #6b7075;
+  --border: #dfe4ea;
+  --shadow: 0 1px 3px rgba(16, 35, 47, 0.1), 0 8px 24px rgba(16, 35, 47, 0.08);
+
+  --font-display: var(--font);
+  color-scheme: light;
+}
+
+/* "rewind-blue": the identity bridge — rewind's charcoal + poster mono type,
+   Telegram's night blue as the accent. */
+:root[data-theme="rewind-blue"] {
+  --accent: #479bee;
+  --accent-bright: #6ab3f3;
+  --accent-contrast: #0c1723;
+}
+
+/* Poster titles (the Wrapped steal): mono display type set big and loud. */
+:root[data-theme="rewind"] .slide-card h3,
+:root[data-theme="rewind-amber"] .slide-card h3,
+:root[data-theme="rewind-blue"] .slide-card h3 {
+  font-size: 1.6rem;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* TEMPORARY — remove with the ThemePicker component once a theme is chosen. */
+.theme-picker {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1000;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
 html {
   color-scheme: light dark;
+}
+
+:root[data-theme="rewind"],
+:root[data-theme="rewind-amber"],
+:root[data-theme="rewind-blue"] {
+  color-scheme: dark;
 }
 
 body {
@@ -104,10 +219,16 @@ h3 {
 
 .wordmark-rewind {
   color: var(--accent);
-  font-size: 0.55em;
-  letter-spacing: -0.32em;
-  margin-right: 0.55em;
-  vertical-align: 0.2em;
+  width: 0.75em;
+  height: 0.48em;
+  vertical-align: 0.06em;
+  margin-right: 0.14em;
+}
+
+/* The glyph inside a .btn-primary label. */
+.btn-glyph {
+  width: 0.9em;
+  height: 0.58em;
 }
 
 .wordmark-link {
@@ -419,7 +540,30 @@ a:hover {
 
 /* Slides */
 
+/* One horizontally scrolling row of equal-width slides, snapping per slide.
+   Native scrolling supplies the swipe gesture and its physics; padding keeps
+   card shadows from being clipped by the scroll container. */
+.slide-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 4px 4px 28px;
+  margin: -4px -4px -28px;
+}
+
+.slide-track::-webkit-scrollbar {
+  display: none;
+}
+
 .slide-card {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+  /* One slide per gesture, however hard the fling — it's a story deck. */
+  scroll-snap-stop: always;
   min-height: 340px;
 }
 

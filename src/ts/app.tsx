@@ -11,6 +11,7 @@ import { isSharedSummary } from "./share/summary";
 import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
+import { RewindGlyph } from "./rewindGlyph";
 
 import type { HitRefs, MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { ShareRef } from "./share/link";
@@ -33,6 +34,79 @@ interface Progress {
  * on-device — Retrogram has no backend.
  */
 export function App() {
+  // Dev-only: `?fixture` renders the dashboard with the sample dataset.
+  const inner =
+    import.meta.env.DEV && location.search.includes("fixture") ? (
+      <FixtureApp />
+    ) : (
+      <ConnectedApp />
+    );
+  return (
+    <>
+      {inner}
+      <ThemePicker />
+    </>
+  );
+}
+
+const THEMES = [
+  "default",
+  "telegram",
+  "telegram-day",
+  "rewind",
+  "rewind-amber",
+  "rewind-blue",
+];
+
+/** TEMPORARY theme switcher — remove with its styles and the main.tsx
+ * localStorage fallback once a theme is chosen. */
+function ThemePicker() {
+  const onChange = (event: Event) => {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    localStorage.setItem("retrogram.theme", value);
+    if (value === "default") {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = value;
+    }
+  };
+  return (
+    <select
+      class="theme-picker"
+      aria-label="Theme (temporary)"
+      value={document.documentElement.dataset.theme ?? "default"}
+      onChange={onChange}
+    >
+      {THEMES.map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function FixtureApp() {
+  const [dataset, setDataset] = useState<Dataset | null>(null);
+  useEffect(() => {
+    void import("./model/fixture").then((m) => setDataset(m.sampleDataset));
+  }, []);
+  if (!dataset) return <p class="muted">Loading fixture…</p>;
+  return (
+    <div class="app">
+      <main>
+        <Dashboard
+          dataset={dataset}
+          media={null}
+          onRefresh={() => undefined}
+          onDisconnect={() => undefined}
+        />
+      </main>
+    </div>
+  );
+}
+
+function ConnectedApp() {
   const [status, setStatus] = useState<Status>("connect");
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [client, setClient] = useState<TelegramClient | null>(null);
@@ -106,10 +180,8 @@ export function App() {
     }
   };
 
-  // Re-ingest from Telegram, bypassing the cached dataset — the cache never
-  // expires on its own, so this is how stale results get recomputed. The old
-  // cache entry is kept until the new ingest succeeds and overwrites it, so
-  // an interrupted refresh doesn't lose the existing results.
+  // Re-ingest, bypassing the cache. The old entry survives until the new
+  // ingest succeeds, so an interrupted refresh keeps the existing results.
   const handleRefresh = async () => {
     if (!client) return;
     setStatus("loading");
@@ -167,9 +239,7 @@ export function App() {
               if (shareRef) exitShared();
             }}
           >
-            <span class="wordmark-rewind" aria-hidden="true">
-              ◀◀
-            </span>
+            <RewindGlyph class="wordmark-rewind" />
             Retrogram
           </a>
         </h1>
