@@ -31,6 +31,17 @@ function apply(): void {
   document.documentElement.dataset.theme = dark ? "telegram" : "telegram-day";
 }
 
+/** True when the currently applied theme is the dark one. */
+export function isDarkApplied(): boolean {
+  return document.documentElement.dataset.theme === "telegram";
+}
+
+/** Notify on browser scheme changes (relevant while the pref is "auto"). */
+export function onSchemeChange(callback: () => void): () => void {
+  media().addEventListener("change", callback);
+  return () => media().removeEventListener("change", callback);
+}
+
 export function initTheme(): void {
   localStorage.removeItem("retrogram.theme"); // stale key from the old picker
   const forced = new URLSearchParams(location.search).get("theme");

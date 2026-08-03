@@ -12,7 +12,6 @@ import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
 import Logo from "../telegram-rewind.svg?react";
-import { getSchemePref, setSchemePref, type SchemePref } from "./theme";
 
 import type { HitRefs, MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { ShareRef } from "./share/link";
@@ -40,34 +39,6 @@ export function App() {
     return <FixtureApp />;
   }
   return <ConnectedApp />;
-}
-
-/** Day/night override, following the browser scheme by default. */
-function SchemeToggle() {
-  const [pref, setPref] = useState<SchemePref>(getSchemePref);
-  const choose = (next: SchemePref) => {
-    setSchemePref(next);
-    setPref(next);
-  };
-  return (
-    <span class="scheme-toggle" role="group" aria-label="Color scheme">
-      {(["auto", "light", "dark"] as const).map((option) => (
-        <button
-          type="button"
-          key={option}
-          class={
-            option === pref
-              ? "scheme-option scheme-option-active"
-              : "scheme-option"
-          }
-          aria-pressed={option === pref}
-          onClick={() => choose(option)}
-        >
-          {option}
-        </button>
-      ))}
-    </span>
-  );
 }
 
 function FixtureApp() {
@@ -311,8 +282,6 @@ function ConnectedApp() {
               </a>
             </>
           )}
-          {" · Theme: "}
-          <SchemeToggle />
         </p>
       </footer>
     </div>

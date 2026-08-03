@@ -143,33 +143,6 @@
   letter-spacing: 0.05em;
 }
 
-/* Day/night override in the footer. */
-.scheme-toggle {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.scheme-option {
-  font: inherit;
-  padding: 0 4px;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.scheme-option:hover {
-  text-decoration: underline;
-}
-
-/* Active state needs a non-color cue too. */
-.scheme-option-active {
-  color: var(--accent);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 html {
   color-scheme: light dark;
 }

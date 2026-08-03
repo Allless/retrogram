@@ -18,6 +18,9 @@ import { SharePanel } from "./SharePanel";
 import ShareIcon from "../../icons/share.svg?react";
 import RefreshIcon from "../../icons/refresh.svg?react";
 import LogoutIcon from "../../icons/logout.svg?react";
+import BulbIcon from "../../icons/bulb.svg?react";
+import MoonIcon from "../../icons/moon.svg?react";
+import { isDarkApplied, onSchemeChange, setSchemePref } from "../theme";
 
 import type { ComponentChildren } from "preact";
 import type { MediaContext, MediaPreview } from "../media/downloadMedia";
@@ -30,6 +33,28 @@ interface Slide {
   title: string;
   description: string;
   content: ComponentChildren;
+}
+
+/** Day/night toggle; the icon shows the mode a click switches to. */
+function ThemeToggle() {
+  const [dark, setDark] = useState(isDarkApplied);
+  useEffect(() => onSchemeChange(() => setDark(isDarkApplied())), []);
+  const flip = () => {
+    setSchemePref(dark ? "light" : "dark");
+    setDark(!dark);
+  };
+  const target = dark ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      class="btn-secondary btn-icon"
+      title={`Switch to ${target} theme`}
+      aria-label={`Switch to ${target} theme`}
+      onClick={flip}
+    >
+      {dark ? <BulbIcon /> : <MoonIcon />}
+    </button>
+  );
 }
 
 /**
@@ -284,6 +309,7 @@ export function Dashboard({
           <div class="dashboard-head">
             <h2>Your Telegram, in review</h2>
             <div class="head-actions">
+              <ThemeToggle />
               <button
                 type="button"
                 class="btn-secondary btn-icon"
