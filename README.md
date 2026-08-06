@@ -1,4 +1,4 @@
-# ◀◀ Retrogram
+# ◀◀ Rewindly
 
 **Your Telegram, in review.**
 
@@ -6,7 +6,7 @@
 [![Deploy](https://github.com/Allless/retrogram/actions/workflows/deploy.yml/badge.svg)](https://github.com/Allless/retrogram/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-b8441f.svg)](LICENSE)
 
-Retrogram is a personal analytics tool for Telegram that runs entirely in the
+Rewindly is a personal analytics tool for Telegram that runs entirely in the
 browser. It logs into your account as a linked device, reads the last 12
 months of your history locally, and presents the results as a slide deck.
 There is no server and nothing is uploaded.
@@ -33,7 +33,7 @@ There is no server and nothing is uploaded.
 
 1. Log in with the QR code (desktop) or your phone number and a login code
    (mobile — Telegram's mobile apps don't confirm same-device QR links).
-   Retrogram becomes a linked device on your account, like any Telegram
+   Rewindly becomes a linked device on your account, like any Telegram
    client.
 2. The last 12 months of history are fetched over MTProto and analyzed in
    the browser. Results are cached in IndexedDB, so reopening is instant.
@@ -127,5 +127,5 @@ Telegram clients; see the FAQ.
 
 ## Disclaimer
 
-Retrogram is not affiliated with, endorsed by, or sponsored by Telegram.
+Rewindly is not affiliated with, endorsed by, or sponsored by Telegram.
 "Telegram" is a trademark of its respective owner.

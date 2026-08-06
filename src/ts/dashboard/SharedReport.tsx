@@ -71,7 +71,7 @@ export function SharedReport({
       </div>
 
       <p class="muted">
-        Someone shared their Retrogram summary with you —{" "}
+        Someone shared their Rewindly summary with you —{" "}
         {summary.messageCount.toLocaleString()} messages, anonymized: aggregate
         numbers only, no names, no message text.
       </p>

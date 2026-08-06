@@ -11,12 +11,12 @@ describe("share hash", () => {
   it("round-trips a telegraph ref", () => {
     const hash = buildShareHash({
       kind: "telegraph",
-      path: "Retrogram-shared-report-07-23",
+      path: "Rewindly-shared-report-07-23",
       key: "abc_DEF-123",
     });
     expect(parseShareHash(hash)).toEqual({
       kind: "telegraph",
-      path: "Retrogram-shared-report-07-23",
+      path: "Rewindly-shared-report-07-23",
       key: "abc_DEF-123",
     });
   });

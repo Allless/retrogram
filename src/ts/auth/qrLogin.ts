@@ -4,7 +4,7 @@
  * SECURITY: the session string produced here is *full-account access* to the
  * user's Telegram — equivalent to a logged-in device. It is persisted only to
  * this browser's localStorage and must NEVER be uploaded, logged, or leave the
- * device. Retrogram is 100% client-side precisely so this token stays local.
+ * device. Rewindly is 100% client-side precisely so this token stays local.
  *
  * gramjs and its Node polyfills are imported lazily *inside* the function so the
  * rest of the app (and the pure `loginLink` layer) does not hard-crash at import

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" aria-hidden="true">
+  <circle cx="120" cy="120" r="120" fill="var(--rewind-badge, #1274ac)"/>
+  <g transform="translate(31.20,83.42) scale(0.3026)">
+    <g transform="translate(586.60,8.00) scale(-1,1)" fill="var(--rewind-ink, #FFFFFF)">
+      <path d="M 15.87 -7.22 L 311.73 104.64 A 8.4 8.4 0 0 1 312.42 120.06 L 79.98 232.62 A 12 12 0 0 1 63.22 225.16 L 0.10 7.34 A 12 12 0 0 1 15.87 -7.22 Z"/>
+      <path d="M 15.87 -7.22 L 311.73 104.64 A 8.4 8.4 0 0 1 312.42 120.06 L 79.98 232.62 A 12 12 0 0 1 63.22 225.16 L 0.10 7.34 A 12 12 0 0 1 15.87 -7.22 Z" transform="translate(269.44,0)"/>
+    </g>
+  </g>
+</svg>

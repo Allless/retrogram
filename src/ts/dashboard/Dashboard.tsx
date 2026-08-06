@@ -319,7 +319,7 @@ export function Dashboard({
       <HitPreviewProvider media={media}>
         <section class="dashboard">
           <div class="dashboard-head">
-            <h2>Your Telegram, in review</h2>
+            <h2>Your Telegram, rewound</h2>
             <div class="head-actions">
               <ThemeToggle />
               <button

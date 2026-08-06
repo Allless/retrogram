@@ -1,4 +1,4 @@
-# Retrogram — Working Plan
+# Rewindly — Working Plan
 
 Personal, 100% client-side Telegram analytics. You connect your **own** account and get "Wrapped"-style insights about your own usage.
 
@@ -8,7 +8,7 @@ The whole design rests on a single distinction: **self-analysis, not surveillanc
 
 - **Data subject == user.** The person being analyzed is the person doing the analyzing, on their own account, with their own credentials. There is no third party whose data is being collected without consent.
 - **Client-side-only means the developer is not a data controller.** Because messages are read, processed, and displayed entirely in the browser and never touch a server we run, we never "process" anyone's personal data under GDPR. No controller/processor obligations attach.
-- **Contrast with the rejected idea.** The person-centric / OSINT direction (feed a handle, get someone else's groups and messages) was rejected as non-compliant: it profiles non-consenting third parties, relies on scraped or breached data, and makes the operator a controller of other people's data. Retrogram is the legally-clean inverse.
+- **Contrast with the rejected idea.** The person-centric / OSINT direction (feed a handle, get someone else's groups and messages) was rejected as non-compliant: it profiles non-consenting third parties, relies on scraped or breached data, and makes the operator a controller of other people's data. Rewindly is the legally-clean inverse.
 - **The bright line:** the day we add a backend that sees user data (cloud sync, server-side parsing, telemetry on message content), we take on full data-controller obligations. Keep everything in the browser.
 
 ## Auth decision

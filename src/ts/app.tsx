@@ -11,7 +11,7 @@ import { isSharedSummary } from "./share/summary";
 import { fetchShare } from "./share/telegraph";
 import { clearDataset, loadDataset, saveDataset } from "./store/datasetCache";
 import { REPO_URL } from "./links";
-import Logo from "../telegram-rewind.svg?react";
+import Logo from "../logo.svg?react";
 
 import type { HitRefs, MediaRefs, PeerRefs } from "./ingestion/ingest";
 import type { ShareRef } from "./share/link";
@@ -31,7 +31,7 @@ interface Progress {
  * Root component and data-flow controller. On connect it reads the account's
  * history into a normalized `Dataset` (from the IndexedDB cache if present,
  * otherwise a fresh ingest), then hands it to the dashboard. Everything stays
- * on-device — Retrogram has no backend.
+ * on-device — Rewindly has no backend.
  */
 export function App() {
   // Dev-only: `?fixture` renders the dashboard with the sample dataset.
@@ -195,10 +195,10 @@ function ConnectedApp() {
             }}
           >
             <Logo class="wordmark-logo" />
-            Retrogram
+            Rewindly
           </a>
         </h1>
-        <p class="tagline">Your Telegram, in review — 100% in your browser</p>
+        <p class="tagline">Your Telegram, rewound — 100% in your browser</p>
       </header>
 
       <main>
@@ -206,7 +206,7 @@ function ConnectedApp() {
           <div class="error-panel">
             <p>{shareError}</p>
             <button type="button" class="btn-secondary" onClick={exitShared}>
-              Go to Retrogram
+              Go to Rewindly
             </button>
           </div>
         )}
@@ -296,7 +296,7 @@ async function loadSharedSummary(ref: ShareRef): Promise<SharedSummary> {
       : await decryptText(await fetchShare(ref.path), ref.key);
   const parsed: unknown = JSON.parse(json);
   if (!isSharedSummary(parsed)) {
-    throw new Error("This link doesn't contain a valid Retrogram share.");
+    throw new Error("This link doesn't contain a valid Rewindly share.");
   }
   return parsed;
 }

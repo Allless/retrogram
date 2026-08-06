@@ -1,4 +1,4 @@
-# Retrogram — Foundation Spec
+# Rewindly — Foundation Spec
 
 The shared substrate every analytics module depends on. Build this **first**; once
 the schema, fixture, and module interface exist, the eight stat modules and the

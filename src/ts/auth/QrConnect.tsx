@@ -319,7 +319,7 @@ export function QrConnect({ onConnected }: QrConnectProps) {
       )}
 
       <p class="muted hint trust-note">
-        Retrogram is open-source and has no server — it runs entirely in this
+        Rewindly is open-source and has no server — it runs entirely in this
         browser tab. Your login talks only to Telegram's own API, and your
         session never leaves this device. Don't take our word for it:{" "}
         <a href={REPO_URL} target="_blank" rel="noopener noreferrer">

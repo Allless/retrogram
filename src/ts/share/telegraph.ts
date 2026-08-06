@@ -55,7 +55,7 @@ export async function uploadShare(payload: string): Promise<TelegraphShare> {
     access_token: accessToken,
     // Single-letter title → short page path → short share URL.
     title: "r",
-    author_name: "Retrogram",
+    author_name: "Rewindly",
     content: JSON.stringify([{ tag: "p", children: [payload] }]),
   });
   const path = page.path;
