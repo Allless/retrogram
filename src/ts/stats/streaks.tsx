@@ -6,9 +6,20 @@
 
 import { dayKey } from "./shared/time";
 import { defineStat } from "./registry";
+import { isNoiseChat } from "./shared/chatFilters";
+import { PeerRows } from "./shared/PeerRows";
 import type { Dataset } from "../model/types";
 
+export interface ChatStreak {
+  chatId: string;
+  title: string;
+  username?: string;
+  days: number;
+}
+
 export interface StreaksResult {
+  /** Longest per-chat runs of consecutive days with at least one message. */
+  perChat: ChatStreak[];
   longestStreakDays: number;
   currentStreakDays: number;
   activeDays: number;
@@ -18,6 +29,9 @@ export interface StreaksResult {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/** Below this a "streak" with someone is just a couple of chatty days. */
+const MIN_CHAT_STREAK = 3;
+const CHAT_STREAK_LIMIT = 5;
 
 /**
  * Convert a "YYYY-MM-DD" key to an integer day number (days since the Unix
@@ -36,6 +50,7 @@ function compute(dataset: Dataset): StreaksResult {
 
   if (messages.length === 0) {
     return {
+      perChat: [],
       longestStreakDays: 0,
       currentStreakDays: 0,
       activeDays: 0,
@@ -55,6 +70,37 @@ function compute(dataset: Dataset): StreaksResult {
     if (message.timestamp < firstTs) firstTs = message.timestamp;
     if (message.timestamp > lastTs) lastTs = message.timestamp;
   }
+
+  // Per-chat streaks, direct chats only — "never a day apart" with a group
+  // means something much weaker than with a person.
+  const perChatDays = new Map<string, Set<number>>();
+  for (const message of messages) {
+    if (isNoiseChat(dataset, message.chatId)) continue;
+    const chat = dataset.chats[message.chatId];
+    if (chat !== undefined && chat.type !== "private") continue;
+    const days = perChatDays.get(message.chatId) ?? new Set<number>();
+    days.add(dayNumberFromKey(dayKey(message.timestamp, tz)));
+    perChatDays.set(message.chatId, days);
+  }
+  const perChat: ChatStreak[] = [];
+  for (const [chatId, days] of perChatDays) {
+    const sorted = [...days].sort((a, b) => a - b);
+    let best = 1;
+    let streak = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      streak = sorted[i] === sorted[i - 1] + 1 ? streak + 1 : 1;
+      if (streak > best) best = streak;
+    }
+    if (best >= MIN_CHAT_STREAK) {
+      perChat.push({
+        chatId,
+        title: dataset.chats[chatId]?.title ?? chatId,
+        username: dataset.chats[chatId]?.username,
+        days: best,
+      });
+    }
+  }
+  perChat.sort((a, b) => b.days - a.days);
 
   const sortedDays = [...activeDayNumbers].sort((a, b) => a - b);
 
@@ -78,6 +124,7 @@ function compute(dataset: Dataset): StreaksResult {
   const lastDay = dayNumberFromKey(dayKey(lastTs, tz));
 
   return {
+    perChat: perChat.slice(0, CHAT_STREAK_LIMIT),
     longestStreakDays,
     currentStreakDays,
     activeDays: activeDayNumbers.size,
@@ -89,24 +136,31 @@ function compute(dataset: Dataset): StreaksResult {
 
 function Card({ result }: { result: StreaksResult }) {
   return (
-    <dl class="stat-figures">
-      <div>
-        <dt>Longest streak</dt>
-        <dd>{result.longestStreakDays} days</dd>
-      </div>
-      <div>
-        <dt>Current streak</dt>
-        <dd>{result.currentStreakDays} days</dd>
-      </div>
-      <div>
-        <dt>Active days</dt>
-        <dd>{result.activeDays}</dd>
-      </div>
-      <div>
-        <dt>Total span</dt>
-        <dd>{result.totalSpanDays} days</dd>
-      </div>
-    </dl>
+    <div class="response-times">
+      <dl class="stat-figures">
+        <div>
+          <dt>Longest streak</dt>
+          <dd>{result.longestStreakDays} days</dd>
+        </div>
+        <div>
+          <dt>Current streak</dt>
+          <dd>{result.currentStreakDays} days</dd>
+        </div>
+        <div>
+          <dt>Active days</dt>
+          <dd>{result.activeDays}</dd>
+        </div>
+        <div>
+          <dt>Total span</dt>
+          <dd>{result.totalSpanDays} days</dd>
+        </div>
+      </dl>
+      <PeerRows
+        heading="Never a day apart"
+        rows={result.perChat}
+        detail={(chat) => `${chat.days} days in a row`}
+      />
+    </div>
   );
 }
 

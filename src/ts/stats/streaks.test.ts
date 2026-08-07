@@ -87,6 +87,7 @@ describe("streaks.compute", () => {
   it("returns zeros and nulls for an empty dataset", () => {
     const result = streaks.compute(makeDataset([], 0));
     expect(result).toEqual({
+      perChat: [],
       longestStreakDays: 0,
       currentStreakDays: 0,
       activeDays: 0,

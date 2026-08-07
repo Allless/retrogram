@@ -8,6 +8,7 @@ import { register } from "./registry";
 import { activityHeatmap } from "./activityHeatmap";
 import { emojiFrequency } from "./emojiFrequency";
 import { ghostedChats } from "./ghostedChats";
+import { nightOwls } from "./nightOwls";
 import { greatestHits } from "./greatestHits";
 import { reactions } from "./reactions";
 import { responseTimes } from "./responseTimes";
@@ -32,6 +33,7 @@ export const STAT_REGISTRY: RegisteredStat[] = [
   register(leftOnRead),
   register(textingStyles),
   register(ghostedChats),
+  register(nightOwls),
   register(emojiFrequency),
   register(reactions),
   register(streaks),

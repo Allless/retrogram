@@ -3,7 +3,10 @@ import type { FunctionComponent } from "preact";
 import { PeerAvatar, PeerName } from "../media/avatars";
 import { defineStat } from "./registry";
 import { humanizeSeconds } from "./shared/formatDuration";
+import { ghostedChats } from "./ghostedChats";
+import { nightOwls } from "./nightOwls";
 import { computeResponseTimes } from "./responseTimesCompute";
+import { streaks } from "./streaks";
 import { computeTextingStyles } from "./textingStylesCompute";
 import { isNoiseChat } from "./shared/chatFilters";
 import type { Dataset } from "../model/types";
@@ -100,6 +103,41 @@ function compute(dataset: Dataset): TrophyShelfResult {
         } conversations`
       : "",
   );
+
+  const youFastest = response.youReplyFastest[0];
+  if (youFastest?.yourMedianSeconds != null) {
+    add(
+      "You drop everything for",
+      youFastest,
+      `you answer in ${humanizeSeconds(youFastest.yourMedianSeconds, response.minuteGranularity ?? false)}`,
+    );
+  }
+
+  const quiet = ghostedChats.compute(dataset).chats[0];
+  if (quiet) {
+    add(
+      "Longest silence",
+      quiet,
+      `${quiet.daysSinceLast} days since the last message`,
+    );
+  }
+
+  const nights = nightOwls.compute(dataset);
+  const owl = nights.nightOwls[0] ?? nights.afterDarkOnly[0];
+  if (owl) {
+    add(
+      "Your 3am friend",
+      owl,
+      owl.nightMessages !== undefined
+        ? `all ${owl.nightMessages} of your messages after 11pm`
+        : `${Math.round(owl.share * 100)}% of your messages after 11pm`,
+    );
+  }
+
+  const together = streaks.compute(dataset).perChat[0];
+  if (together) {
+    add("Never a day apart", together, `${together.days} days in a row`);
+  }
 
   add(
     "Chief ghost",

@@ -17,6 +17,7 @@ import { streaks } from "../stats/streaks";
 import { computeResponseTimes } from "../stats/responseTimesCompute";
 import { computeTextingStyles } from "../stats/textingStylesCompute";
 import { ghostedChats } from "../stats/ghostedChats";
+import { nightOwls } from "../stats/nightOwls";
 import { topDms, topGroups } from "../stats/topContacts";
 import { trophyShelf } from "../stats/trophyShelf";
 import { topMediaByType } from "../stats/topMedia";
@@ -27,6 +28,7 @@ import type { EmojiCount } from "../stats/emojiFrequency";
 import type { ReactionCount } from "../stats/reactions";
 import type { StreaksResult } from "../stats/streaks";
 import type { GhostedChatsResult } from "../stats/ghostedChats";
+import type { NightOwlsResult } from "../stats/nightOwls";
 import type { ResponseTimesResult } from "../stats/responseTimesCompute";
 import type { TextingStylesResult } from "../stats/textingStylesCompute";
 import type { TopContactsResult } from "../stats/topContacts";
@@ -58,6 +60,7 @@ export const SHARE_SECTIONS = [
   { key: "ghosting", label: "Ghosted", aboutOthers: true },
   { key: "styles", label: "How you text", aboutOthers: true },
   { key: "quiet", label: "Gone quiet", aboutOthers: true },
+  { key: "nights", label: "Night owls", aboutOthers: true },
   { key: "trophies", label: "Trophy shelf", aboutOthers: true },
 ] as const;
 
@@ -152,6 +155,7 @@ export interface SharedSummary {
   response?: ResponseTimesResult;
   styles?: TextingStylesResult;
   quiet?: GhostedChatsResult;
+  nights?: NightOwlsResult;
   trophies?: TrophyShelfResult;
 }
 
@@ -293,7 +297,12 @@ export function buildShare(
     summary.reactionsReceived = computed.received;
   }
   if (sections.has("streaks")) {
-    summary.streaks = streaks.compute(dataset);
+    const computed = streaks.compute(dataset);
+    // perChat names peers — anonymize like every other per-chat section.
+    summary.streaks = {
+      ...computed,
+      perChat: computed.perChat.map((chat) => hide(chat)),
+    };
   }
   if (sections.has("hits")) {
     const hits = greatestHits.compute(dataset).hits;
@@ -390,6 +399,15 @@ export function buildShare(
   if (sections.has("quiet")) {
     const full = ghostedChats.compute(dataset);
     summary.quiet = { chats: full.chats.map((c) => hide(c)) };
+  }
+  if (sections.has("nights")) {
+    const full = nightOwls.compute(dataset);
+    summary.nights = {
+      ...full,
+      nightOwls: full.nightOwls.map((c) => hide(c)),
+      earlyBirds: full.earlyBirds.map((c) => hide(c)),
+      afterDarkOnly: full.afterDarkOnly.map((c) => hide(c)),
+    };
   }
   if (sections.has("trophies")) {
     const full = trophyShelf.compute(dataset);

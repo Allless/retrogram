@@ -1,6 +1,7 @@
 import { activityHeatmap } from "../stats/activityHeatmap";
 import { emojiFrequency } from "../stats/emojiFrequency";
 import { ghostedChats } from "../stats/ghostedChats";
+import { nightOwls } from "../stats/nightOwls";
 import { greatestHits, MEDIA_LABELS } from "../stats/greatestHits";
 import { leftOnRead } from "../stats/leftOnRead";
 import { reactions } from "../stats/reactions";
@@ -155,6 +156,9 @@ export function SharedReport({
   }
   if (summary.quiet && summary.quiet.chats.length > 0) {
     add(ghostedChats, <ghostedChats.Card result={summary.quiet} />);
+  }
+  if (summary.nights) {
+    add(nightOwls, <nightOwls.Card result={summary.nights} />);
   }
   if (summary.topEmoji) {
     add(
