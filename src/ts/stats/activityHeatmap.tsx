@@ -116,7 +116,8 @@ const Card: FunctionComponent<{ result: ActivityHeatmapResult }> = ({
 
 export const activityHeatmap = defineStat<ActivityHeatmapResult>({
   id: "activity-heatmap",
-  title: "Activity heatmap",
+  title: "When you're awake",
+  icon: "🕐",
   description: "Your busiest hours of the day and days of the week.",
   compute,
   Card,

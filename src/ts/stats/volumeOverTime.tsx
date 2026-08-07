@@ -16,6 +16,10 @@ export interface VolumeOverTimeResult {
   monthly: MonthlyVolume[];
   totalSent: number;
   totalReceived: number;
+  /** Words are style-neutral where message counts aren't — splitting one
+   * thought into five bubbles inflates messages, not words. */
+  wordsSent: number;
+  wordsReceived: number;
 }
 
 function compute(dataset: Dataset): VolumeOverTimeResult {
@@ -42,8 +46,14 @@ function compute(dataset: Dataset): VolumeOverTimeResult {
 
   const totalSent = monthly.reduce((sum, m) => sum + m.sent, 0);
   const totalReceived = monthly.reduce((sum, m) => sum + m.received, 0);
+  let wordsSent = 0;
+  let wordsReceived = 0;
+  for (const m of dmMessages) {
+    if (m.direction === "sent") wordsSent += m.wordCount;
+    else wordsReceived += m.wordCount;
+  }
 
-  return { monthly, totalSent, totalReceived };
+  return { monthly, totalSent, totalReceived, wordsSent, wordsReceived };
 }
 
 const Card: FunctionComponent<{ result: VolumeOverTimeResult }> = ({
@@ -56,6 +66,11 @@ const Card: FunctionComponent<{ result: VolumeOverTimeResult }> = ({
       <p class="stat-summary">
         {result.totalSent.toLocaleString()} sent ·{" "}
         {result.totalReceived.toLocaleString()} received
+        <span class="muted">
+          {" "}
+          — {result.wordsSent.toLocaleString()} vs{" "}
+          {result.wordsReceived.toLocaleString()} words
+        </span>
       </p>
       <ul class="volume-bars">
         {result.monthly.map((m) => (
@@ -79,7 +94,8 @@ const Card: FunctionComponent<{ result: VolumeOverTimeResult }> = ({
 
 export const volumeOverTime = defineStat<VolumeOverTimeResult>({
   id: "volume-over-time",
-  title: "Message volume",
+  title: "How much you talked",
+  icon: "💬",
   description: "How many DM messages you sent and received each month.",
   compute,
   Card,

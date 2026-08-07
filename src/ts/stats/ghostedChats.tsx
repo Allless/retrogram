@@ -97,6 +97,7 @@ function Card({ result }: { result: GhostedChatsResult }) {
 export const ghostedChats = defineStat<GhostedChatsResult>({
   id: "ghosted-chats",
   title: "Gone quiet",
+  icon: "🌙",
   description: "Conversations that went dormant, and who spoke last.",
   compute,
   Card,

@@ -113,6 +113,7 @@ function Card({ result }: { result: StreaksResult }) {
 export const streaks = defineStat<StreaksResult>({
   id: "streaks",
   title: "Streaks",
+  icon: "🔥",
   description: "Your longest and current runs of consecutive active days.",
   compute,
   Card,

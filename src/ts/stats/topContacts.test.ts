@@ -72,7 +72,7 @@ describe("topDms.compute", () => {
     }
   });
 
-  it("resolves titles from dataset.chats and sums words", () => {
+  it("resolves titles from dataset.chats and sums words per direction", () => {
     const { chats } = topDms.compute(
       makeDataset([
         msg("c:1", "sent", 3),
@@ -86,14 +86,16 @@ describe("topDms.compute", () => {
       chatId: "c:1",
       title: "Chat One",
       messages: 2,
-      words: 5,
+      wordsSent: 3,
+      wordsReceived: 2,
       sent: 1,
       received: 1,
     });
     expect(chats[1]).toMatchObject({
       title: "Chat Two",
       messages: 1,
-      words: 5,
+      wordsSent: 5,
+      wordsReceived: 0,
     });
   });
 

@@ -14,7 +14,8 @@ export interface TopChat {
   title: string;
   username?: string;
   messages: number;
-  words: number;
+  wordsSent: number;
+  wordsReceived: number;
   sent: number;
   received: number;
 }
@@ -42,16 +43,18 @@ function computeTop(
         title: dataset.chats[message.chatId]?.title ?? message.chatId,
         username: dataset.chats[message.chatId]?.username,
         messages: 0,
-        words: 0,
+        wordsSent: 0,
+        wordsReceived: 0,
         sent: 0,
         received: 0,
       } satisfies TopChat);
 
     existing.messages += 1;
-    existing.words += message.wordCount;
     if (message.direction === "sent") {
+      existing.wordsSent += message.wordCount;
       existing.sent += 1;
     } else {
+      existing.wordsReceived += message.wordCount;
       existing.received += 1;
     }
 
@@ -106,7 +109,8 @@ function RankList({
 
 export const topDms = defineStat<TopContactsResult>({
   id: "top-dms",
-  title: "Top DMs",
+  title: "Your people",
+  icon: "🫂",
   description: "The people you exchange the most messages with.",
   compute: (dataset) =>
     computeTop(
@@ -118,7 +122,8 @@ export const topDms = defineStat<TopContactsResult>({
     <RankList
       chats={result.chats}
       detail={(chat) =>
-        `${chat.messages} msgs · ${chat.sent} sent · ${chat.received} received`
+        `${chat.sent.toLocaleString()} sent · ${chat.received.toLocaleString()} received — ` +
+        `${chat.wordsSent.toLocaleString()} vs ${chat.wordsReceived.toLocaleString()} words`
       }
       emptyLabel="No direct chats yet."
     />
@@ -127,7 +132,8 @@ export const topDms = defineStat<TopContactsResult>({
 
 export const topGroups = defineStat<TopContactsResult>({
   id: "top-groups",
-  title: "Top groups",
+  title: "Groups you live in",
+  icon: "🏟️",
   description: "The groups and channels where you post the most.",
   compute: (dataset) =>
     computeTop(
@@ -138,7 +144,9 @@ export const topGroups = defineStat<TopContactsResult>({
   Card: ({ result }) => (
     <RankList
       chats={result.chats}
-      detail={(chat) => `${chat.sent} msgs from you`}
+      detail={(chat) =>
+        `${chat.sent.toLocaleString()} msgs · ${chat.wordsSent.toLocaleString()} words from you`
+      }
       emptyLabel="No group activity yet."
     />
   ),

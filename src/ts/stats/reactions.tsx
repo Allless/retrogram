@@ -86,7 +86,8 @@ const Card: FunctionComponent<{ result: ReactionsResult }> = ({ result }) => {
 
 export const reactions = defineStat<ReactionsResult>({
   id: "reactions",
-  title: "Reactions",
+  title: "Applause",
+  icon: "👏",
   description: "The emoji you react with — and the ones you get back.",
   compute,
   Card,

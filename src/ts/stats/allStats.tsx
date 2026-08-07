@@ -14,6 +14,10 @@ import { responseTimes } from "./responseTimes";
 import { streaks } from "./streaks";
 import { topDms, topGroups } from "./topContacts";
 import { volumeOverTime } from "./volumeOverTime";
+import { whoTextsFirst } from "./whoTextsFirst";
+import { leftOnRead } from "./leftOnRead";
+import { textingStyles } from "./textingStyles";
+import { trophyShelf } from "./trophyShelf";
 
 import type { RegisteredStat } from "./registry";
 
@@ -24,9 +28,13 @@ export const STAT_REGISTRY: RegisteredStat[] = [
   register(topDms),
   register(topGroups),
   register(responseTimes),
+  register(whoTextsFirst),
+  register(leftOnRead),
+  register(textingStyles),
   register(ghostedChats),
   register(emojiFrequency),
   register(reactions),
   register(streaks),
   register(greatestHits),
+  register(trophyShelf),
 ];

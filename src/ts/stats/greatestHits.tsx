@@ -119,6 +119,7 @@ const Card: FunctionComponent<{ result: GreatestHitsResult }> = ({
 export const greatestHits = defineStat<GreatestHitsResult>({
   id: "greatest-hits",
   title: "Greatest hits",
+  icon: "🏆",
   description: "Your messages that racked up the most reactions.",
   compute,
   Card,

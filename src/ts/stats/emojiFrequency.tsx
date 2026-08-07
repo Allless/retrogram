@@ -55,7 +55,8 @@ const Card: FunctionComponent<{ result: EmojiFrequencyResult }> = ({
 
 export const emojiFrequency = defineStat<EmojiFrequencyResult>({
   id: "emoji-frequency",
-  title: "Most-used emoji",
+  title: "Your emoji fingerprint",
+  icon: "😀",
   description: "The emoji you send most across your messages.",
   compute,
   Card,

@@ -10,10 +10,10 @@ import { STAT_REGISTRY } from "../stats/allStats";
 import { formatRelativeDays } from "../stats/shared/formatDate";
 import { AvatarContext, type AvatarSource } from "../media/avatars";
 import { getAvatarUrl, getHitPreview } from "../media/downloadMedia";
-import { enqueueFetch, focusFetchPriority } from "../media/fetchQueue";
+import { enqueueFetch } from "../media/fetchQueue";
 import { HitPreviewContext, type HitPreviewSource } from "../media/hitPreviews";
-import { SlidePriorityContext } from "../media/slidePriority";
 import { MediaStat } from "./MediaStat";
+import { SlideDeck, type Slide } from "./SlideDeck";
 import { SharePanel } from "./SharePanel";
 import ShareIcon from "../../icons/share.svg?react";
 import RefreshIcon from "../../icons/refresh.svg?react";
@@ -28,17 +28,10 @@ import {
 } from "../theme";
 
 import type { ComponentChildren } from "preact";
-import type { MediaContext, MediaPreview } from "../media/downloadMedia";
+import type { MediaResolver, MediaPreview } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
 
 const DAY_MS = 86_400_000;
-
-interface Slide {
-  id: string;
-  title: string;
-  description: string;
-  content: ComponentChildren;
-}
 
 /** Day/night toggle; the icon shows the mode a click switches to. */
 function ThemeToggle() {
@@ -79,7 +72,7 @@ function AvatarProvider({
   media,
   children,
 }: {
-  media: MediaContext | null;
+  media: MediaResolver | null;
   children: ComponentChildren;
 }) {
   const [urls, setUrls] = useState<Record<string, string | null>>({});
@@ -122,7 +115,7 @@ function HitPreviewProvider({
   media,
   children,
 }: {
-  media: MediaContext | null;
+  media: MediaResolver | null;
   children: ComponentChildren;
 }) {
   const [previews, setPreviews] = useState<Record<string, MediaPreview | null>>(
@@ -166,11 +159,19 @@ function HitPreviewProvider({
 
 /** Every slide in deck order: registry stats with the sticker/GIF slides
  * spliced into the expression cluster (before `streaks` → `greatest-hits`,
- * the finale), and Share last. */
-function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
-  const statSlides: Slide[] = STAT_REGISTRY.map((stat) => ({
+ * the finale), and Share last. `supports` drops slides the dataset's
+ * platform has no data for. */
+function buildSlides(
+  dataset: Dataset,
+  media: MediaResolver | null,
+  supports: (slideId: string) => boolean,
+): Slide[] {
+  const statSlides: Slide[] = STAT_REGISTRY.filter((stat) =>
+    supports(stat.id),
+  ).map((stat) => ({
     id: stat.id,
     title: stat.title,
+    icon: stat.icon,
     description: stat.description,
     content: <stat.Render dataset={dataset} />,
   }));
@@ -178,7 +179,8 @@ function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
   const mediaSlides: Slide[] = [
     {
       id: "top-stickers",
-      title: "Top stickers",
+      title: "Sticker rotation",
+      icon: "🧩",
       description: "The stickers you send most.",
       content: (
         <MediaStat
@@ -191,7 +193,8 @@ function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
     },
     {
       id: "top-gifs",
-      title: "Top GIFs",
+      title: "GIF rotation",
+      icon: "🎞️",
       description: "The GIFs you send most.",
       content: (
         <MediaStat
@@ -208,11 +211,12 @@ function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
   const streaksAt = foundStreaks === -1 ? statSlides.length : foundStreaks;
   return [
     ...statSlides.slice(0, streaksAt),
-    ...mediaSlides,
+    ...mediaSlides.filter((s) => supports(s.id)),
     ...statSlides.slice(streaksAt),
     {
       id: "share",
       title: "Share your year",
+      icon: "🔗",
       description:
         "Pick sections and get an anonymized link — never names or messages.",
       content: <SharePanel dataset={dataset} media={media} />,
@@ -222,9 +226,12 @@ function buildSlides(dataset: Dataset, media: MediaContext | null): Slide[] {
 
 interface DashboardProps {
   dataset: Dataset;
-  media: MediaContext | null;
-  onRefresh: () => void;
+  media: MediaResolver | null;
+  /** Re-ingest handler; omitted when the platform can't refresh in place. */
+  onRefresh?: () => void;
   onDisconnect: () => void;
+  /** Platform slide filter; every slide is shown when omitted. */
+  supportsSlide?: (slideId: string) => boolean;
 }
 
 /**
@@ -238,86 +245,19 @@ export function Dashboard({
   media,
   onRefresh,
   onDisconnect,
+  supportsSlide,
 }: DashboardProps) {
   // Memoized so navigation re-renders only the frame — re-rendering every
   // mounted slide per index change recomputes all stats and stalls scrolling.
-  const slides = useMemo(() => buildSlides(dataset, media), [dataset, media]);
-
-  // `index` mirrors the scroll position; goTo() drives the scroll — buttons,
-  // dots, and arrow keys all funnel through it.
-  const [index, setIndex] = useState(0);
-  const count = slides.length;
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  // Uniform slides: total scrollable distance splits evenly between them.
-  const slideStep = (track: HTMLDivElement) =>
-    count > 1 ? (track.scrollWidth - track.clientWidth) / (count - 1) : 1;
-
-  const goTo = useCallback(
-    (target: number) => {
-      const clamped = Math.max(0, Math.min(count - 1, target));
-      const track = trackRef.current;
-      if (track) {
-        track.scrollTo({
-          left: clamped * slideStep(track),
-          behavior: "smooth",
-        });
-      }
-      setIndex(clamped);
-    },
-    [count],
+  const slides = useMemo(
+    () => buildSlides(dataset, media, supportsSlide ?? (() => true)),
+    [dataset, media, supportsSlide],
   );
-
-  const onTrackScroll = () => {
-    const track = trackRef.current;
-    if (!track) return;
-    const at = Math.round(track.scrollLeft / slideStep(track));
-    setIndex(Math.max(0, Math.min(count - 1, at)));
-  };
-
-  // Chrome announces the pending snap target mid-gesture, letting the story
-  // bar lead the animation; elsewhere onTrackScroll's rounding updates it.
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const onSnapChanging = (event: Event) => {
-      const target = (event as { snapTargetInline?: Element | null })
-        .snapTargetInline;
-      const at = target
-        ? Array.prototype.indexOf.call(track.children, target)
-        : -1;
-      if (at >= 0) setIndex(at);
-    };
-    track.addEventListener("scrollsnapchanging", onSnapChanging);
-    return () =>
-      track.removeEventListener("scrollsnapchanging", onSnapChanging);
-  }, []);
-
-  const current = Math.min(index, count - 1);
-  const indexRef = useRef(current);
-  indexRef.current = current;
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") {
-        goTo(indexRef.current + 1);
-      } else if (event.key === "ArrowLeft") {
-        goTo(indexRef.current - 1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [goTo]);
-
-  // The visible slide's pending media downloads jump the queue.
-  useEffect(() => {
-    focusFetchPriority(current);
-  }, [current]);
 
   return (
     <AvatarProvider media={media}>
       <HitPreviewProvider media={media}>
-        <section class="dashboard">
+        <SlideDeck slides={slides}>
           <div class="dashboard-head">
             <h2>Your Telegram, rewound</h2>
             <div class="head-actions">
@@ -327,19 +267,27 @@ export function Dashboard({
                 class="btn-secondary btn-icon"
                 title="Share your year"
                 aria-label="Share your year"
-                onClick={() => goTo(count - 1)}
+                onClick={() => {
+                  const track = document.querySelector(".slide-track");
+                  track?.lastElementChild?.scrollIntoView({
+                    behavior: "smooth",
+                    inline: "start",
+                  });
+                }}
               >
                 <ShareIcon />
               </button>
-              <button
-                type="button"
-                class="btn-secondary btn-icon"
-                title="Refresh data — re-read your Telegram history"
-                aria-label="Refresh data"
-                onClick={onRefresh}
-              >
-                <RefreshIcon />
-              </button>
+              {onRefresh && (
+                <button
+                  type="button"
+                  class="btn-secondary btn-icon"
+                  title="Refresh data — re-read your chat history"
+                  aria-label="Refresh data"
+                  onClick={onRefresh}
+                >
+                  <RefreshIcon />
+                </button>
+              )}
               <button
                 type="button"
                 class="btn-secondary btn-icon"
@@ -361,59 +309,7 @@ export function Dashboard({
             )}
             . Nothing was uploaded.
           </p>
-
-          <div class="story-bar" role="tablist" aria-label="Stats slides">
-            {slides.map((s, i) => (
-              <button
-                type="button"
-                key={s.id}
-                class={
-                  i <= current ? "story-seg story-seg-filled" : "story-seg"
-                }
-                aria-label={s.title}
-                aria-selected={i === current}
-                role="tab"
-                onClick={() => goTo(i)}
-              />
-            ))}
-          </div>
-
-          <div class="slide-track" ref={trackRef} onScroll={onTrackScroll}>
-            {slides.map((s, i) => (
-              <article class="stat-card slide-card" key={s.id}>
-                <header class="stat-card-head">
-                  <h3>{s.title}</h3>
-                  <p class="muted">{s.description}</p>
-                </header>
-                <SlidePriorityContext.Provider value={i}>
-                  {s.content}
-                </SlidePriorityContext.Provider>
-              </article>
-            ))}
-          </div>
-
-          <nav class="slide-nav" aria-label="Slide navigation">
-            <button
-              type="button"
-              class="btn-secondary"
-              disabled={current === 0}
-              onClick={() => goTo(current - 1)}
-            >
-              ← Prev
-            </button>
-            <span class="slide-count muted">
-              {current + 1} / {count}
-            </span>
-            <button
-              type="button"
-              class="btn-secondary"
-              disabled={current === count - 1}
-              onClick={() => goTo(current + 1)}
-            >
-              Next →
-            </button>
-          </nav>
-        </section>
+        </SlideDeck>
       </HitPreviewProvider>
     </AvatarProvider>
   );

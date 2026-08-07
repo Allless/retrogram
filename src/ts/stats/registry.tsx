@@ -21,6 +21,8 @@ import type { Dataset } from "../model/types";
 export interface StatModule<TResult = unknown> {
   id: string; // stable, kebab-case
   title: string;
+  /** One emoji, shown beside the title to make the slide memorable. */
+  icon: string;
   description: string;
   compute: (dataset: Dataset) => TResult;
   Card: FunctionComponent<{ result: TResult }>;
@@ -40,6 +42,7 @@ export function defineStat<TResult>(
 export interface RegisteredStat {
   id: string;
   title: string;
+  icon: string;
   description: string;
   Render: FunctionComponent<{ dataset: Dataset }>;
 }
@@ -52,6 +55,7 @@ export function register<TResult>(module: StatModule<TResult>): RegisteredStat {
   return {
     id: module.id,
     title: module.title,
+    icon: module.icon,
     description: module.description,
     Render,
   };
