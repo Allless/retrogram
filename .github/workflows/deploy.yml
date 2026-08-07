@@ -3,8 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # Commit-free redeploys (gh workflow run deploy.yml).
+  workflow_dispatch:
 
 permissions:
+  contents: read
   pages: write
   id-token: write
 
@@ -13,11 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # Split from deploy so a rerun of a failed deploy reuses the uploaded
+  # artifact instead of uploading a duplicate (which deploy-pages rejects).
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,5 +41,15 @@ jobs:
         with:
           path: dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # The Pages queue has been seen stalling past the 10-minute default.
+          timeout: 1800000
