@@ -286,7 +286,7 @@ async function loadSharedSummary(ref: ShareRef): Promise<SharedSummary> {
   const json =
     ref.kind === "inline"
       ? await inflateText(ref.data)
-      : await decryptText(await fetchShare(ref.path), ref.key);
+      : await decryptText(await fetchShare(ref.paths), ref.key);
   const parsed: unknown = JSON.parse(json);
   const status = shareStatus(parsed);
   if (status === "unsupported") {

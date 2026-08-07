@@ -7,6 +7,7 @@ import {
   ALL_SHARE_SECTIONS,
   buildShare,
   DEFAULT_SHARE_SECTIONS,
+  dropThumblessMedia,
   SHARE_EXTRAS,
   SHARE_SECTIONS,
   stripHeavy,
@@ -17,11 +18,19 @@ import { embedThumbs } from "../share/thumbs";
 import {
   MAX_SUMMARY_CHARS,
   rememberShare,
+  shareCapacityChars,
   uploadShare,
 } from "../share/telegraph";
 
 import type { MediaResolver } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
+import type { SharedSummary } from "../share/summary";
+
+/** Rounds of re-fitting allowed when the payload lands over capacity. */
+const REFIT_ATTEMPTS = 2;
+/** Extra plaintext chars shaved per re-fit so a round isn't wasted by a
+ * few bytes of encoding jitter. */
+const REFIT_MARGIN = 500;
 
 type ShareState =
   | { step: "idle" }
@@ -83,7 +92,8 @@ export function SharePanel({
     // otherwise the button appears frozen for the whole build.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const { summary, thumbSources } = buildShare(dataset, selected);
+    const { summary: built, thumbSources } = buildShare(dataset, selected);
+    let summary = built;
     // Sticker/GIF thumbs always embed with their section (public catalog
     // items); hit text + photo/video thumbs only with the explicit opt-in.
     const sources = {
@@ -91,18 +101,17 @@ export function SharePanel({
       stickers: thumbSources.stickers,
       gifs: thumbSources.gifs,
     };
-    if (
+    const hasThumbs =
       sources.hits.some(Boolean) ||
       sources.stickers.length > 0 ||
-      sources.gifs.length > 0
-    ) {
-      // Thumbnails go in last, sized to whatever room the chosen sections
-      // leave under the payload ceiling — so picking more sections shrinks
-      // the images instead of breaking the hosted share.
-      const room = MAX_SUMMARY_CHARS - JSON.stringify(summary).length;
+      sources.gifs.length > 0;
+
+    /** Embed thumbnails into a fresh copy of the payload at a given budget. */
+    const withThumbs = async (room: number): Promise<SharedSummary> => {
+      const { summary: fresh } = buildShare(dataset, selected);
       if (room > 0) {
         await embedThumbs(
-          summary,
+          fresh,
           sources,
           media,
           (done, total) =>
@@ -110,11 +119,42 @@ export function SharePanel({
           room,
         );
       }
+      // A sticker slot with a count and no image reads as broken.
+      return dropThumblessMedia(fresh);
+    };
+
+    if (hasThumbs) {
+      // Thumbnails go in last, sized to whatever room the chosen sections
+      // leave under the payload ceiling — so picking more sections shrinks
+      // the images instead of breaking the hosted share.
+      let room = MAX_SUMMARY_CHARS - JSON.stringify(summary).length;
+      summary = await withThumbs(room);
+
+      // Close the loop on the real constraint: the ceiling above is derived
+      // from base64 expansion, so a payload can still land over the page cap
+      // (and would otherwise lose *every* thumbnail to the no-thumbs
+      // fallback). Measure the actual ciphertext and re-fit once if needed.
+      for (let attempt = 0; attempt < REFIT_ATTEMPTS; attempt++) {
+        const measured = (await encryptText(JSON.stringify(summary))).payload
+          .length;
+        const overflow = measured - shareCapacityChars();
+        if (overflow <= 0) break;
+        // Ciphertext is base64 of the plaintext: trim the overflow in
+        // plaintext terms, plus a margin so one round is usually enough.
+        room -= Math.ceil((overflow * 3) / 4) + REFIT_MARGIN;
+        debug("share over capacity, refitting thumbnails", {
+          measured,
+          overflow,
+          room,
+        });
+        summary = await withThumbs(room);
+      }
     }
+
     setState({ step: "working", note: "Encrypting & uploading…" });
     const base = `${location.origin}${location.pathname}`;
-    const hostedUrl = (path: string, key: string) =>
-      `${base}${buildShareHash({ kind: "telegraph", path, key })}`;
+    const hostedUrl = (paths: string[], key: string) =>
+      `${base}${buildShareHash({ kind: "telegraph", paths, key })}`;
 
     // Prefer hosting the full payload; if it doesn't fit, hosting it without
     // thumbnails keeps every section — far better than dropping down to a
@@ -130,7 +170,7 @@ export function SharePanel({
         rememberShare(uploaded);
         setState({
           step: "ready",
-          url: hostedUrl(uploaded.path, key),
+          url: hostedUrl(uploaded.paths, key),
           mode: attempt === "full" ? "hosted" : "hostedNoThumbs",
         });
         return;

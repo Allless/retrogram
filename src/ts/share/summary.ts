@@ -182,7 +182,10 @@ export interface ShareBuild {
 }
 
 const HIT_TEXT_LIMIT = 100;
-const TOP_MEDIA_LIMIT = 5;
+/* Shares carry fewer stickers/GIFs than the dashboard shows: with ten media
+ * jobs the byte budget spread so thin that each rendered at ~60px. Three
+ * apiece is the same story at roughly double the resolution. */
+const TOP_MEDIA_LIMIT = 3;
 
 const ALL_SECTIONS: ReadonlySet<ShareSection> = new Set(
   SHARE_SECTIONS.map((s) => s.key),
@@ -433,6 +436,23 @@ export function stripHeavy(summary: SharedSummary): SharedSummary {
   delete lean.quiet;
   delete lean.trophies;
   return lean;
+}
+
+/**
+ * Drop sticker/GIF entries whose thumbnail didn't fit the budget: a slot with
+ * a count and no image reads as broken, and the remaining items are the ones
+ * worth showing. Run after `embedThumbs`.
+ */
+export function dropThumblessMedia(summary: SharedSummary): SharedSummary {
+  const withThumb = (items?: SharedTopMedia[]) =>
+    items?.filter((item) => item.thumb !== undefined);
+  return {
+    ...summary,
+    ...(summary.stickerTop
+      ? { stickerTop: withThumb(summary.stickerTop) }
+      : {}),
+    ...(summary.gifTop ? { gifTop: withThumb(summary.gifTop) } : {}),
+  };
 }
 
 export function stripThumbs(summary: SharedSummary): SharedSummary {

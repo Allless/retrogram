@@ -10,7 +10,8 @@ const API = "https://api.telegra.ph";
 const SHARES_STORAGE_KEY = "retrogram.shares";
 
 export interface TelegraphShare {
-  path: string;
+  /** Pages holding consecutive slices of the payload, in order. */
+  paths: string[];
   accessToken: string;
 }
 
@@ -47,29 +48,51 @@ export const MAX_PAYLOAD_CHARS = 60_000;
  */
 export const MAX_SUMMARY_CHARS = Math.floor((MAX_PAYLOAD_CHARS * 3) / 4) - 1000;
 
-/** Upload a share payload; returns the page path and its edit token. */
+/** Total ciphertext a share may carry, across all its pages. */
+export function shareCapacityChars(): number {
+  return MAX_PAYLOAD_CHARS * MAX_SHARE_PAGES;
+}
+
+/** How many pages a single share may span. Raising this multiplies the
+ * budget (and the thumbnail resolution that fits inside it) at the cost of
+ * one more upload per page and a slightly longer link. */
+export const MAX_SHARE_PAGES = 1;
+
+/**
+ * Upload a share payload, splitting it across pages when it exceeds one
+ * page's cap. Returns the page paths in order plus the edit token.
+ */
 export async function uploadShare(payload: string): Promise<TelegraphShare> {
-  if (payload.length > MAX_PAYLOAD_CHARS) {
+  const slices: string[] = [];
+  for (let at = 0; at < payload.length; at += MAX_PAYLOAD_CHARS) {
+    slices.push(payload.slice(at, at + MAX_PAYLOAD_CHARS));
+  }
+  if (slices.length > MAX_SHARE_PAGES) {
     throw new Error("share payload exceeds Telegraph's page size limit");
   }
+
   const account = await call("createAccount", { short_name: "retrogram" });
   const accessToken = account.access_token;
   if (typeof accessToken !== "string") {
     throw new Error("telegra.ph returned no access token");
   }
 
-  const page = await call("createPage", {
-    access_token: accessToken,
-    // Single-letter title → short page path → short share URL.
-    title: "r",
-    author_name: "Rewindly",
-    content: JSON.stringify([{ tag: "p", children: [payload] }]),
-  });
-  const path = page.path;
-  if (typeof path !== "string") {
-    throw new Error("telegra.ph returned no page path");
+  const paths: string[] = [];
+  for (const slice of slices) {
+    const page = await call("createPage", {
+      access_token: accessToken,
+      // Single-letter title → short page path → short share URL.
+      title: "r",
+      author_name: "Rewindly",
+      content: JSON.stringify([{ tag: "p", children: [slice] }]),
+    });
+    const path = page.path;
+    if (typeof path !== "string") {
+      throw new Error("telegra.ph returned no page path");
+    }
+    paths.push(path);
   }
-  return { path, accessToken };
+  return { paths, accessToken };
 }
 
 /** Collect all text under Telegraph content nodes. */
@@ -83,12 +106,17 @@ function textOf(node: unknown): string {
 }
 
 /** Fetch a share payload back from its page path. */
-export async function fetchShare(path: string): Promise<string> {
-  const page = await call(`getPage/${encodeURIComponent(path)}`, {
-    return_content: "true",
-  });
-  const payload = textOf(page.content).trim();
-  if (!payload) {
+export async function fetchShare(paths: string[]): Promise<string> {
+  const slices = await Promise.all(
+    paths.map(async (path) => {
+      const page = await call(`getPage/${encodeURIComponent(path)}`, {
+        return_content: "true",
+      });
+      return textOf(page.content).trim();
+    }),
+  );
+  const payload = slices.join("");
+  if (!payload || slices.some((slice) => !slice)) {
     throw new Error("This share is empty or was revoked.");
   }
   return payload;
@@ -102,7 +130,7 @@ export function rememberShare(share: TelegraphShare): void {
   try {
     const raw = localStorage.getItem(SHARES_STORAGE_KEY);
     const shares = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    shares[share.path] = share.accessToken;
+    for (const path of share.paths) shares[path] = share.accessToken;
     localStorage.setItem(SHARES_STORAGE_KEY, JSON.stringify(shares));
   } catch {
     // Best effort — sharing still works without revocation bookkeeping.

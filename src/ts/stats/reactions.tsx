@@ -8,6 +8,7 @@
 import type { FunctionComponent } from "preact";
 
 import { defineStat } from "./registry";
+import { withEmojiPresentation } from "./shared/emoji";
 import type { Dataset } from "../model/types";
 
 export interface ReactionCount {
@@ -64,7 +65,7 @@ const ReactionRow: FunctionComponent<{
       <ul class="emoji-row">
         {reactions.map(({ emoji, count }) => (
           <li key={emoji} class="emoji-item" title={`${count}×`}>
-            <span class="emoji-glyph">{emoji}</span>
+            <span class="emoji-glyph">{withEmojiPresentation(emoji)}</span>
             <span class="emoji-count">{count}</span>
           </li>
         ))}

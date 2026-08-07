@@ -12,19 +12,27 @@
 import { fromBase64Url, toBase64Url } from "./crypto";
 
 export type ShareRef =
-  | { kind: "telegraph"; path: string; key: string }
+  /** One or more Telegraph pages holding consecutive slices of the payload,
+   * in order; the key decrypts the joined result. Multiple pages let a share
+   * exceed a single page's size cap. */
+  | { kind: "telegraph"; paths: string[]; key: string }
   | { kind: "inline"; data: string };
 
 export function buildShareHash(ref: ShareRef): string {
   return ref.kind === "telegraph"
-    ? `#s=${ref.path}!${ref.key}`
+    ? `#s=${ref.paths.join("~")}!${ref.key}`
     : `#d=${ref.data}`;
 }
 
 export function parseShareHash(hash: string): ShareRef | null {
-  const telegraph = /^#s=([A-Za-z0-9-]+)!([A-Za-z0-9_-]+)$/.exec(hash);
+  const telegraph =
+    /^#s=([A-Za-z0-9-]+(?:~[A-Za-z0-9-]+)*)!([A-Za-z0-9_-]+)$/.exec(hash);
   if (telegraph) {
-    return { kind: "telegraph", path: telegraph[1], key: telegraph[2] };
+    return {
+      kind: "telegraph",
+      paths: telegraph[1].split("~"),
+      key: telegraph[2],
+    };
   }
   const inline = /^#d=([01][A-Za-z0-9_-]*)$/.exec(hash);
   if (inline) {

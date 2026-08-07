@@ -8,16 +8,27 @@ import {
 } from "./link";
 
 describe("share hash", () => {
-  it("round-trips a telegraph ref", () => {
+  it("round-trips a single-page telegraph ref", () => {
     const hash = buildShareHash({
       kind: "telegraph",
-      path: "Rewindly-shared-report-07-23",
+      paths: ["Rewindly-shared-report-07-23"],
       key: "abc_DEF-123",
     });
     expect(parseShareHash(hash)).toEqual({
       kind: "telegraph",
-      path: "Rewindly-shared-report-07-23",
+      paths: ["Rewindly-shared-report-07-23"],
       key: "abc_DEF-123",
+    });
+  });
+
+  it("round-trips a multi-page telegraph ref", () => {
+    const paths = ["r-08-07-6", "r-08-07-7", "r-08-07-8"];
+    const hash = buildShareHash({ kind: "telegraph", paths, key: "k_1-2" });
+    expect(hash).toContain("~");
+    expect(parseShareHash(hash)).toEqual({
+      kind: "telegraph",
+      paths,
+      key: "k_1-2",
     });
   });
 

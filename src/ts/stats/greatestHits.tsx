@@ -9,6 +9,7 @@ import type { FunctionComponent } from "preact";
 import { formatDay } from "./shared/formatDate";
 import { HitMedia } from "../media/hitPreviews";
 import { defineStat } from "./registry";
+import { withEmojiPresentation } from "./shared/emoji";
 import type { Dataset, MediaType } from "../model/types";
 
 export interface GreatestHit {
@@ -90,7 +91,9 @@ const Card: FunctionComponent<{ result: GreatestHitsResult }> = ({
         <li key={hit.messageId} class="hit">
           <div class="hit-head">
             <span class="hit-count">{hit.reactionCount}</span>
-            <span class="hit-emoji">{hit.reactionEmoji.join(" ")}</span>
+            <span class="hit-emoji">
+              {hit.reactionEmoji.map(withEmojiPresentation).join(" ")}
+            </span>
           </div>
           {hit.mediaType !== "text" && (
             <HitMedia

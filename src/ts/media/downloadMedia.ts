@@ -5,6 +5,7 @@
  * `MediaResolver` on miss, persisting for future sessions.
  */
 
+import { debug } from "../debug";
 import { loadBlob, saveBlob, type StoredBlob } from "../store/datasetCache";
 
 export interface MediaPreview {
@@ -32,8 +33,21 @@ async function cacheFirst(
   fetchBlob: (() => Promise<StoredBlob | null>) | null,
 ): Promise<StoredBlob | null> {
   const cached = await loadBlob(key);
-  if (cached) return cached;
-  const blob = (await fetchBlob?.()) ?? null;
+  if (cached) {
+    debug("media cache hit", { key, type: cached.type, video: cached.video });
+    return cached;
+  }
+  if (!fetchBlob) {
+    // No live session: a cache-restored dataset can only show what it
+    // downloaded before.
+    debug("media cache miss, no resolver", { key });
+    return null;
+  }
+  const blob = await fetchBlob();
+  debug(blob ? "media downloaded" : "media unresolvable", {
+    key,
+    ...(blob ? { type: blob.type, bytes: blob.bytes.byteLength } : {}),
+  });
   if (blob) void saveBlob(key, blob);
   return blob;
 }

@@ -13,6 +13,7 @@ import { trophyShelf } from "../stats/trophyShelf";
 import { volumeOverTime } from "../stats/volumeOverTime";
 import { whoTextsFirst } from "../stats/whoTextsFirst";
 import { AvatarContext, PeerAvatar } from "../media/avatars";
+import { withEmojiPresentation } from "../stats/shared/emoji";
 import { SlideDeck, type Slide } from "./SlideDeck";
 import RewindGlyph from "../../rewind.svg?react";
 
@@ -91,7 +92,10 @@ export function SharedReport({
           <dt>Top message</dt>
           <dd>
             {summary.topHitReactions ?? 0}×{" "}
-            {(summary.topHitEmoji ?? []).slice(0, 3).join("")}
+            {(summary.topHitEmoji ?? [])
+              .slice(0, 3)
+              .map(withEmojiPresentation)
+              .join("")}
           </dd>
         </div>
         <div>
@@ -214,7 +218,9 @@ export function SharedReport({
           <li key={i} class="hit">
             <div class="hit-head">
               <span class="hit-count">{hit.reactionCount}</span>
-              <span class="hit-emoji">{hit.reactionEmoji.join(" ")}</span>
+              <span class="hit-emoji">
+                {hit.reactionEmoji.map(withEmojiPresentation).join(" ")}
+              </span>
             </div>
             {hit.thumb && <img class="hit-media" src={hit.thumb} alt="" />}
             {hit.text ? (

@@ -1,14 +1,14 @@
 /**
  * Opt-in thumbnail embedding for shares. Downscales already-downloaded media
- * (blob store / live refs) to JPEG data URIs so a viewer with no Telegram
+ * (blob store / live refs) to WebP data URIs so a viewer with no Telegram
  * access still sees images; video previews (mp4 gifs, webm stickers)
  * contribute their first frame.
  *
- * Sizing is dynamic: a shared byte budget — sized to keep the encrypted
- * payload under Telegraph's 64KB page cap — is split by weight (Greatest
- * hits get 3× a sticker/GIF's share) against the REMAINING budget, so slack
- * from small images flows to later ones. Each thumb renders at the largest
- * dimensions that fit its allocation.
+ * Every thumbnail renders at its display size and at ONE shared quality —
+ * the highest the whole set can afford inside the byte budget that keeps the
+ * encrypted payload under Telegraph's page cap. Only if the quality floor
+ * still overflows does the whole set scale down together, so a row never
+ * comes out at mixed qualities or mixed sizes.
  */
 
 import { debug } from "../debug";
@@ -25,20 +25,32 @@ import type { SharedSummary, ThumbSources } from "./summary";
 /** Fallback budget when the caller doesn't measure the room left for images. */
 const THUMB_BUDGET = 28_000;
 
-// Hits are real photos/video frames; stickers and GIFs are small, simple
-// images — weight the budget split and cap dimensions accordingly.
-const HIT_WEIGHT = 3;
-const MEDIA_WEIGHT = 1;
+// Hits are real photos shown large; stickers and GIFs are small, simple
+// images shown at ~72 CSS px. The caps encode that difference — a shared
+// quality then applies to all of them.
 const HIT_MAX_PX = 320;
 const MEDIA_MAX_PX = 160;
 
 const MIN_PX = 48; // below this a thumb is useless — give up instead
-const MIN_ALLOC = 1_000; // chars; don't bother rendering into less
-const RENDER_ATTEMPTS = 5;
-const JPEG_QUALITY = 0.6;
-// JPEG headers + data-URI prefix are a fixed floor that doesn't shrink with
-// pixel area — subtract it when estimating how far to scale down.
-const FIXED_OVERHEAD = 800;
+const RENDER_ATTEMPTS = 4;
+/* Ceilings for the quality search, not fixed settings: the fitter takes the
+ * highest quality that fits the allocation, so these only cap how good a
+ * generously-funded thumbnail may get. */
+const ENCODE_QUALITY = 0.85;
+/** Floor for the quality search — below this the artefacts are worse than
+ * the resolution loss would have been. */
+const MIN_QUALITY = 0.2;
+/** Refinement probes after the interpolated guess. Interpolation lands
+ * close, so two are enough to converge. */
+const QUALITY_PROBES = 2;
+/** The quality that fit last time, reused as the seed: shares from one
+ * account have similar images, so the first guess is usually the answer. */
+let lastFittedQuality: number | null = null;
+/** WebP is ~25–35% smaller than JPEG at the same perceived quality, which
+ * buys resolution inside a fixed byte budget. Everything since Safari 14
+ * can encode it; older engines silently produce PNG, so the first render
+ * probes the result and the whole share falls back to JPEG. */
+let encodeType: "image/webp" | "image/jpeg" = "image/webp";
 
 /**
  * First decoded frame of a video blob, ready to draw onto a canvas. Seeks a
@@ -102,6 +114,7 @@ async function loadSource(preview: MediaPreview): Promise<DrawableSource> {
 async function renderAt(
   drawable: DrawableSource,
   px: number,
+  quality: number,
 ): Promise<string | null> {
   const scale = Math.min(1, px / Math.max(drawable.width, drawable.height));
   const canvas = new OffscreenCanvas(
@@ -111,16 +124,20 @@ async function renderAt(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.drawImage(drawable.source, 0, 0, canvas.width, canvas.height);
-  const out = await canvas.convertToBlob({
-    type: "image/jpeg",
-    quality: JPEG_QUALITY,
-  });
+  let out = await canvas.convertToBlob({ type: encodeType, quality });
+  if (encodeType === "image/webp" && out.type !== "image/webp") {
+    // The engine ignored the request (older Safari) — PNG would blow the
+    // budget, so switch this share to JPEG and re-encode.
+    debug("thumb encoder: webp unsupported, falling back to jpeg");
+    encodeType = "image/jpeg";
+    out = await canvas.convertToBlob({ type: encodeType, quality });
+  }
   const bytes = new Uint8Array(await out.arrayBuffer());
   let binary = "";
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return `data:image/jpeg;base64,${btoa(binary)}`;
+  return `data:${out.type};base64,${btoa(binary)}`;
 }
 
 /**
@@ -128,63 +145,134 @@ async function renderAt(
  * measure, and shrink by sqrt(alloc/actual) until it fits (JPEG size scales
  * roughly with pixel area).
  */
-async function toThumbWithin(
-  preview: MediaPreview,
-  maxPx: number,
-  alloc: number,
-): Promise<string | null> {
-  try {
-    const drawable = await loadSource(preview);
-    let px = Math.min(maxPx, Math.max(drawable.width, drawable.height));
-    for (let attempt = 0; attempt < RENDER_ATTEMPTS; attempt++) {
-      const uri = await renderAt(drawable, px);
-      if (!uri) return null;
-      if (uri.length <= alloc) return uri;
-      debug("thumb over alloc", { px, size: uri.length, alloc });
-      // Scale by the compressible portion only — the fixed overhead never
-      // shrinks, so naive sqrt(alloc/size) converges too slowly and stalls
-      // a few chars above the allocation.
-      const targetBody = Math.max(alloc - FIXED_OVERHEAD, 200);
-      const actualBody = Math.max(uri.length - FIXED_OVERHEAD, 300);
-      px = Math.min(
-        px - 1,
-        Math.floor(px * Math.sqrt(targetBody / actualBody) * 0.95),
-      );
-      if (px < MIN_PX) {
-        debug("thumb gave up: below MIN_PX");
+/**
+ * Render every thumbnail of a share at ONE shared quality: the highest that
+ * keeps the whole set inside the budget. Per-image allocations looked fair
+ * but weren't — a slice is fixed before the image is seen, so a cheap GIF
+ * sat on budget a complex sticker needed, and rows came out at mixed
+ * qualities. One quality for all is both simpler and visually consistent.
+ *
+ * Dimensions stay at each kind's display cap (hits are shown larger than
+ * stickers); only if the quality floor still overflows does everything scale
+ * down together.
+ */
+async function fitAll(
+  items: { preview: MediaPreview; maxPx: number; label: string }[],
+  budget: number,
+): Promise<(string | null)[]> {
+  if (items.length === 0) return [];
+  const drawables = await Promise.all(
+    items.map(async (item) => {
+      try {
+        return await loadSource(item.preview);
+      } catch (err) {
+        debug("thumb source failed", {
+          label: item.label,
+          error: err instanceof Error ? err.message : String(err),
+        });
         return null;
       }
+    }),
+  );
+
+  const renderAll = async (quality: number, scale: number) =>
+    Promise.all(
+      drawables.map(async (drawable, i) => {
+        if (!drawable) return null;
+        const px = Math.floor(
+          Math.min(items[i].maxPx, Math.max(drawable.width, drawable.height)) *
+            scale,
+        );
+        if (px < MIN_PX) return null;
+        return renderAt(drawable, px, quality);
+      }),
+    );
+  const total = (uris: (string | null)[]) =>
+    uris.reduce((sum, uri) => sum + (uri?.length ?? 0), 0);
+
+  let scale = 1;
+  for (let shrink = 0; shrink < RENDER_ATTEMPTS; shrink++) {
+    let low = MIN_QUALITY;
+    let high = ENCODE_QUALITY;
+
+    // The ceiling is worth trying first: when the budget is generous it ends
+    // the search in one round, and it anchors the interpolation otherwise.
+    const atCeiling = await renderAll(high, scale);
+    const ceilingSize = total(atCeiling);
+    if (ceilingSize <= budget) {
+      lastFittedQuality = high;
+      debug("thumbs fitted", {
+        quality: high,
+        scale: Number(scale.toFixed(2)),
+        size: ceilingSize,
+        budget,
+        renders: 1,
+      });
+      return atCeiling;
     }
-    debug("thumb gave up: attempts exhausted");
-    return null;
-  } catch (err) {
-    debug("thumb render failed", err instanceof Error ? err.message : err);
-    return null;
+
+    const atFloor = await renderAll(low, scale);
+    const floorSize = total(atFloor);
+    if (floorSize > budget) {
+      // Even the floor overflows: scale every thumbnail down together so the
+      // set stays visually uniform, and try again.
+      const next = Math.sqrt(budget / floorSize) * 0.95;
+      debug("thumbs too big at min quality", {
+        scale: Number(scale.toFixed(2)),
+        sizeAtFloor: floorSize,
+        budget,
+        nextScale: Number((scale * next).toFixed(2)),
+      });
+      scale *= next;
+      continue;
+    }
+
+    // Secant step: size moves smoothly with quality, so interpolating
+    // between the two measurements lands far closer than halving would.
+    let best = atFloor;
+    let bestQuality = low;
+    let renders = 2;
+    let guess = lastFittedQuality ?? low;
+    for (let probe = 0; probe <= QUALITY_PROBES; probe++) {
+      const span = high - low;
+      const interpolated =
+        low +
+        (span * (budget - floorSize)) / Math.max(ceilingSize - floorSize, 1);
+      const q = Math.min(
+        high - 0.01,
+        Math.max(low + 0.01, probe === 0 ? guess : interpolated),
+      );
+      if (q <= low || q >= high) break;
+      const uris = await renderAll(q, scale);
+      renders += 1;
+      if (total(uris) <= budget) {
+        best = uris;
+        bestQuality = q;
+        low = q;
+      } else {
+        high = q;
+      }
+      guess = q;
+    }
+    lastFittedQuality = bestQuality;
+    debug("thumbs fitted", {
+      quality: Number(bestQuality.toFixed(2)),
+      scale: Number(scale.toFixed(2)),
+      size: total(best),
+      budget,
+      renders,
+    });
+    return best;
   }
+  debug("thumbs gave up", { budget });
+  return items.map(() => null);
 }
 
 interface ThumbJob {
   resolve: () => Promise<MediaPreview | null>;
   assign: (thumb: string) => void;
-  weight: number;
   maxPx: number;
   label: string;
-}
-
-/** Interleave group members: a1, b1, c1, a2, b2, … — fair budget order. */
-function interleave(groups: ThumbJob[][]): ThumbJob[] {
-  const queue: ThumbJob[] = [];
-  for (let i = 0; ; i++) {
-    let pushed = false;
-    for (const group of groups) {
-      const job = group[i];
-      if (job) {
-        queue.push(job);
-        pushed = true;
-      }
-    }
-    if (!pushed) return queue;
-  }
 }
 
 /** Mutates `summary`, filling `thumb` fields from the aligned sources. */
@@ -206,7 +294,6 @@ export async function embedThumbs(
       assign: (thumb) => {
         hit.thumb = thumb;
       },
-      weight: HIT_WEIGHT,
       maxPx: HIT_MAX_PX,
       label: `hit ${i}`,
     });
@@ -227,77 +314,67 @@ export async function embedThumbs(
           assign: (thumb: string) => {
             target.thumb = thumb;
           },
-          weight: MEDIA_WEIGHT,
           maxPx: MEDIA_MAX_PX,
           label: `${kind} ${i}`,
         },
       ];
     });
 
-  const queue = interleave([
-    hitJobs,
-    mediaJobs("sticker", sources.stickers, summary.stickerTop),
-    mediaJobs("gif", sources.gifs, summary.gifTop),
-  ]);
+  const jobs = [
+    ...hitJobs,
+    ...mediaJobs("sticker", sources.stickers, summary.stickerTop),
+    ...mediaJobs("gif", sources.gifs, summary.gifTop),
+  ];
+  debug("thumb jobs", { jobs: jobs.map((job) => job.label), budget });
 
-  // Kick off all downloads concurrently (they dominate the wait); spend the
-  // byte budget in queue order so the split is deterministic.
-  const downloads = queue.map((job) =>
-    job.resolve().catch(() => null as MediaPreview | null),
+  // Downloads dominate the wait, so start them all at once.
+  const previews = await Promise.all(
+    jobs.map(async (job, i) => {
+      try {
+        const preview = await job.resolve();
+        onProgress?.(i + 1, jobs.length);
+        return preview;
+      } catch (err) {
+        debug(`thumb ${job.label}: download threw`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+    }),
   );
-  const previews: (MediaPreview | null)[] = [];
+
+  const items: {
+    preview: MediaPreview;
+    maxPx: number;
+    label: string;
+    job: ThumbJob;
+  }[] = [];
+  for (const [i, preview] of previews.entries()) {
+    if (!preview) {
+      // Expired file reference, an unsupported sticker format (.tgs), or a
+      // codec the browser can't decode.
+      debug(`thumb ${jobs[i].label}: no preview resolvable`);
+      continue;
+    }
+    items.push({
+      preview,
+      maxPx: jobs[i].maxPx,
+      label: jobs[i].label,
+      job: jobs[i],
+    });
+  }
 
   try {
-    // Pass 1: allocate from the remaining budget by weight — slack from
-    // small images flows forward to later ones.
-    let remaining = budget;
-    let weightLeft = queue.reduce((sum, job) => sum + job.weight, 0);
-    const failed: number[] = [];
-    for (const [i, job] of queue.entries()) {
-      const alloc = Math.floor((remaining * job.weight) / weightLeft);
-      weightLeft -= job.weight;
-      const preview = await downloads[i];
-      previews[i] = preview;
-      onProgress?.(i + 1, queue.length);
-      if (!preview) {
-        debug(`thumb job ${i} (${job.label}): no preview resolvable`);
+    const uris = await fitAll(
+      items.map(({ preview, maxPx, label }) => ({ preview, maxPx, label })),
+      budget,
+    );
+    for (const [i, uri] of uris.entries()) {
+      if (!uri) {
+        debug(`thumb ${items[i].label}: no thumbnail fitted`);
         continue;
       }
-      if (alloc < MIN_ALLOC) {
-        debug(`thumb job ${i} (${job.label}): alloc ${alloc} below minimum`);
-        failed.push(i);
-        continue;
-      }
-      const thumb = await toThumbWithin(preview, job.maxPx, alloc);
-      if (thumb) {
-        remaining -= thumb.length;
-        job.assign(thumb);
-        debug(`thumb job ${i} (${job.label}): embedded ${thumb.length} chars`);
-      } else {
-        failed.push(i);
-      }
-    }
-
-    // Pass 2: the queue-order split shortchanges early items (they see the
-    // least accumulated slack) — hand whatever budget remains to the ones
-    // that didn't fit.
-    let failWeight = failed.reduce((sum, i) => sum + queue[i].weight, 0);
-    for (const i of failed) {
-      const job = queue[i];
-      const preview = previews[i];
-      const alloc = Math.floor((remaining * job.weight) / failWeight);
-      failWeight -= job.weight;
-      if (!preview || alloc < MIN_ALLOC) continue;
-      const thumb = await toThumbWithin(preview, job.maxPx, alloc);
-      if (thumb) {
-        remaining -= thumb.length;
-        job.assign(thumb);
-        debug(
-          `thumb job ${i} (${job.label}): embedded ${thumb.length} chars on retry`,
-        );
-      } else {
-        debug(`thumb job ${i} (${job.label}): failed even on retry`);
-      }
+      items[i].job.assign(uri);
     }
   } finally {
     for (const preview of previews) {
