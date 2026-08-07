@@ -44,19 +44,21 @@ function makeDataset(messages: Message[], fetchedAt = 0): Dataset {
   };
 }
 
-const S = 1000; // ms per second
+const S = 1000;
+const M = 60 * S;
+const H = 60 * M;
 
-describe("responseTimes.compute", () => {
+describe("responseTimes.compute (session-based)", () => {
   it("computes exact medians from a known alternating sequence", () => {
-    // your gaps: 120, 60, 180 → median 120
-    // their gaps: 80, 240 → median 160
+    // One session (all gaps ≪ 1h fallback threshold).
+    // your gaps: 120, 60, 180 → median 120; their gaps: 80, 240 → median 160
     const messages = [
       msg("received", 0, 0),
-      msg("sent", 120 * S, 1), // your reply: 120s
-      msg("received", 200 * S, 2), // their reply: 80s
-      msg("sent", 260 * S, 3), // your reply: 60s
-      msg("received", 500 * S, 4), // their reply: 240s
-      msg("sent", 680 * S, 5), // your reply: 180s
+      msg("sent", 120 * S, 1),
+      msg("received", 200 * S, 2),
+      msg("sent", 260 * S, 3),
+      msg("received", 500 * S, 4),
+      msg("sent", 680 * S, 5),
     ];
 
     const result = responseTimes.compute(makeDataset(messages));
@@ -68,138 +70,163 @@ describe("responseTimes.compute", () => {
       chatId: "c",
       title: "C",
       yourMedianSeconds: 120,
-      replies: 3,
+      theirMedianSeconds: 160,
+      yourReplies: 3,
+      theirReplies: 2,
+      replies: 5,
     });
   });
 
-  it("excludes gaps longer than the 24h cap", () => {
-    const messages = [
-      msg("received", 0, 0),
-      msg("sent", 25 * 60 * 60 * S, 1), // 25h later → not a reply
-    ];
+  it("does not count a cross-session answer as a reply", () => {
+    // Their message, then yours 25h later: two sessions, no within-session
+    // sender switch — no reply times at all.
+    const messages = [msg("received", 0, 0), msg("sent", 25 * H, 1)];
 
-    const result = responseTimes.compute(makeDataset(messages));
+    const result = responseTimes.compute(makeDataset(messages, 26 * H));
 
     expect(result.yourMedianSeconds).toBeNull();
+    expect(result.theirMedianSeconds).toBeNull();
     expect(result.perChat).toHaveLength(0);
+    // …and their attempt was answered by you opening the next session, so
+    // nobody is ghosting anybody.
+    expect(result.youGhost).toEqual([]);
+    expect(result.theyGhost).toEqual([]);
+  });
+
+  it("counts session openers as initiations", () => {
+    // Three sessions: you open two, they open one.
+    const messages = [
+      msg("sent", 0, 0),
+      msg("received", 1 * M, 1),
+      msg("received", 5 * H, 2),
+      msg("sent", 5 * H + M, 3),
+      msg("sent", 10 * H, 4),
+      msg("received", 10 * H + M, 5),
+      // pad to reach the initiation minimum with a second chat
+      msg("sent", 0, 6, "d"),
+      msg("received", 6 * H, 7, "d"),
+    ];
+
+    const result = responseTimes.compute(makeDataset(messages, 11 * H));
+    expect(result.initiations).toEqual({ yours: 3, theirs: 2 });
+  });
+
+  it("hides initiations below the minimum sample", () => {
+    const result = responseTimes.compute(
+      makeDataset([msg("sent", 0, 0), msg("received", 1 * M, 1)], 2 * H),
+    );
+    expect(result.initiations).toBeNull();
+  });
+
+  it("flags repeatedly ignored attempts as ghosting", () => {
+    // They write to you in three separate sessions and you never say a word
+    // in between — the strictest form of ghosting. (Had you opened any of
+    // the following sessions yourself, that would count as re-engagement.)
+    const messages = [
+      msg("received", 0, 0),
+      msg("received", 6 * H, 1),
+      msg("received", 12 * H, 2), // final session, silence 22h > threshold
+    ];
+    const result = responseTimes.compute(makeDataset(messages, 34 * H));
+
+    expect(result.youGhost).toHaveLength(1);
+    expect(result.youGhost[0]).toMatchObject({
+      chatId: "c",
+      ignoredAttempts: 3,
+      attempts: 3, // they opened all three sessions
+    });
+    expect(result.theyGhost).toEqual([]);
+  });
+
+  it("treats the silent side starting a later conversation as re-engagement", () => {
+    // They attempt, you never reply in-session but open the next session
+    // each time: left-on-read, not fully ghosted — stays out of the lists.
+    const messages = [
+      msg("received", 0, 0),
+      msg("sent", 6 * H, 1),
+      msg("received", 12 * H, 2),
+      msg("sent", 18 * H, 3),
+    ];
+    const result = responseTimes.compute(makeDataset(messages, 30 * H));
+    expect(result.youGhost).toEqual([]);
+    expect(result.theyGhost).toEqual([]);
+  });
+
+  it("keeps a single ignored attempt out of the lists (dead zone)", () => {
+    const messages = [
+      msg("received", 0, 0),
+      msg("sent", 6 * H, 1),
+      msg("received", 12 * H, 2),
+      msg("sent", 12 * H + M, 3), // engaged this time
+    ];
+    const result = responseTimes.compute(makeDataset(messages, 13 * H));
+    expect(result.youGhost).toEqual([]);
+  });
+
+  it("does not count a fresh final message as ignored", () => {
+    const messages = [
+      msg("received", 0, 0),
+      msg("sent", 6 * H, 1),
+      msg("received", 12 * H, 2), // their attempt…
+    ];
+    // …but the export was made minutes later: still pending.
+    const result = responseTimes.compute(makeDataset(messages, 12 * H + 5 * M));
+    expect(result.youGhost).toEqual([]);
+  });
+
+  it("excludes the chat with yourself (Saved Messages) entirely", () => {
+    // Chat id equal to self id: all messages "sent", would otherwise read
+    // as you ghosting yourself and inflate initiations.
+    const selfChat = "user:1";
+    const messages = [
+      msg("sent", 0, 0, selfChat),
+      msg("sent", 6 * H, 1, selfChat),
+      msg("sent", 12 * H, 2, selfChat),
+    ];
+    const dataset = makeDataset(messages, 24 * H);
+    dataset.chats[selfChat] = { id: selfChat, type: "private", title: "Me" };
+    const result = responseTimes.compute(dataset);
+    expect(result.initiations).toBeNull();
+    expect(result.theyGhost).toEqual([]);
+    expect(result.youGhost).toEqual([]);
+    expect(result.perChat).toEqual([]);
+  });
+
+  it("excludes groups from initiations and ghosting", () => {
+    const messages = [
+      msg("sent", 0, 0, "g"),
+      msg("sent", 6 * H, 1, "g"),
+      msg("sent", 12 * H, 2, "g"),
+    ];
+    const result = responseTimes.compute(makeDataset(messages, 24 * H));
+    expect(result.initiations).toBeNull();
+    expect(result.theyGhost).toEqual([]);
+    expect(result.youGhost).toEqual([]);
   });
 
   it("handles an empty dataset without throwing", () => {
     const result = responseTimes.compute(makeDataset([]));
     expect(result.yourMedianSeconds).toBeNull();
     expect(result.theirMedianSeconds).toBeNull();
+    expect(result.initiations).toBeNull();
     expect(result.perChat).toEqual([]);
     expect(result.theyGhost).toEqual([]);
     expect(result.youGhost).toEqual([]);
   });
 
-  const H = 60 * 60 * S;
-
-  /** Alternating chat: you reply after `yourGap` ms, they after `theirGap`. */
-  function alternating(
-    chatId: string,
-    yourGap: number,
-    theirGap: number,
-    rounds = 3,
-    lastFrom: MessageDirection = "sent",
-  ): Message[] {
-    const messages: Message[] = [];
-    let t = 0;
-    for (let i = 0; i < rounds; i++) {
-      messages.push(msg("sent", t, messages.length, chatId));
-      t += theirGap;
-      messages.push(msg("received", t, messages.length, chatId));
-      t += yourGap;
-    }
-    if (lastFrom === "sent") {
-      messages.push(msg("sent", t, messages.length, chatId));
-    }
-    return messages;
-  }
-
-  it("ranks one-sided slowness as ghosting, not mutual slowness", () => {
-    // "c": you answer in 60s, they answer in 48h → they ghost you.
-    // "d": both answer in 48h → slow cadence, ghosting for neither side.
-    const result = responseTimes.compute(
-      makeDataset([
-        ...alternating("c", 60 * S, 48 * H),
-        ...alternating("d", 48 * H, 48 * H),
-      ]),
-    );
-
-    expect(result.theyGhost.map((g) => g.chatId)).toEqual(["c"]);
-    expect(result.youGhost).toEqual([]);
-
-    const [c] = result.theyGhost;
-    expect(Math.round(c.typicalReplySeconds)).toBe(48 * 60 * 60);
-    expect(c.opportunities).toBe(3);
-    const delta = Math.log2(49) - Math.log2(1 + 60 / 3600);
-    expect(c.coefficient).toBeCloseTo(delta * Math.log2(7));
-  });
-
-  it("counts a run left unanswered for over a day against the silent side", () => {
-    // They always answer in 1h; you answer in 60s but never answer their
-    // final message. After 20 days of silence, that pending reply outweighs
-    // your fast history — the chat flips from "they ghost" to "you ghost".
-    const messages = [
-      msg("received", 0, 0),
-      ...alternating("c", 60 * S, 1 * H, 3, "received").map((m, i) => ({
-        ...m,
-        id: `c:${i + 1}`,
-        timestamp: m.timestamp + 60 * S,
-      })),
-    ];
-    const lastTimestamp = Math.max(...messages.map((m) => m.timestamp));
-
-    const fresh = responseTimes.compute(
-      makeDataset(messages, lastTimestamp + H),
-    );
-    expect(fresh.theyGhost.map((g) => g.chatId)).toEqual(["c"]);
-    expect(fresh.youGhost).toEqual([]);
-
-    const stale = responseTimes.compute(
-      makeDataset(messages, lastTimestamp + 20 * 24 * H),
-    );
-    expect(stale.youGhost.map((g) => g.chatId)).toEqual(["c"]);
-    expect(stale.theyGhost).toEqual([]);
-  });
-
-  it("excludes groups from ghost ranking", () => {
-    const result = responseTimes.compute(
-      makeDataset(alternating("g", 60 * S, 48 * H)),
-    );
-    expect(result.theyGhost).toEqual([]);
-    expect(result.youGhost).toEqual([]);
-  });
-
-  it("needs at least 3 reply opportunities per side to qualify", () => {
-    const messages = [
-      msg("sent", 0, 0),
-      msg("received", 100 * S, 1),
-      msg("sent", 200 * S, 2),
-      msg("received", 300 * S, 3),
-    ];
-    const result = responseTimes.compute(makeDataset(messages));
-    expect(result.theyGhost).toEqual([]);
-    expect(result.youGhost).toEqual([]);
-  });
-
-  it("runs on the sample fixture with sane, nonnegative medians", () => {
+  it("runs on the sample fixture with sane results", () => {
     const result = responseTimes.compute(sampleDataset);
 
-    for (const median of [
-      result.yourMedianSeconds,
-      result.theirMedianSeconds,
-    ]) {
-      if (median !== null) expect(median).toBeGreaterThanOrEqual(0);
+    for (const value of [result.yourMedianSeconds, result.theirMedianSeconds]) {
+      if (value !== null) expect(value).toBeGreaterThanOrEqual(0);
     }
-
-    expect(result.perChat.length).toBeLessThanOrEqual(10);
-    for (const chat of result.perChat) {
-      expect(chat.replies).toBeGreaterThan(0);
-      if (chat.yourMedianSeconds !== null) {
-        expect(chat.yourMedianSeconds).toBeGreaterThanOrEqual(0);
-      }
+    if (result.initiations) {
+      expect(result.initiations.yours).toBeGreaterThanOrEqual(0);
+      expect(result.initiations.theirs).toBeGreaterThanOrEqual(0);
+    }
+    expect(result.perChat.length).toBeLessThanOrEqual(6);
+    for (const rank of [...result.theyGhost, ...result.youGhost]) {
+      expect(rank.ignoredAttempts).toBeGreaterThanOrEqual(2);
     }
   });
 });
