@@ -1,24 +1,37 @@
 import { useState } from "preact/hooks";
 
+import { debug } from "../debug";
 import { encryptText } from "../share/crypto";
 import { buildShareHash, deflateText } from "../share/link";
 import {
+  ALL_SHARE_SECTIONS,
   buildShare,
+  DEFAULT_SHARE_SECTIONS,
   SHARE_EXTRAS,
   SHARE_SECTIONS,
+  stripHeavy,
   stripThumbs,
   type ShareSection,
 } from "../share/summary";
 import { embedThumbs } from "../share/thumbs";
-import { rememberShare, uploadShare } from "../share/telegraph";
+import {
+  MAX_SUMMARY_CHARS,
+  rememberShare,
+  uploadShare,
+} from "../share/telegraph";
 
-import type { MediaContext } from "../media/downloadMedia";
+import type { MediaResolver } from "../media/downloadMedia";
 import type { Dataset } from "../model/types";
 
 type ShareState =
   | { step: "idle" }
   | { step: "working"; note: string }
-  | { step: "ready"; url: string; inline: boolean };
+  | {
+      step: "ready";
+      url: string;
+      /** How the payload travelled: hosted, hosted minus images, or in-URL. */
+      mode: "hosted" | "hostedNoThumbs" | "inline";
+    };
 
 /**
  * The "Share your year" slide: pick sections, get a link to an ANONYMIZED
@@ -33,10 +46,12 @@ export function SharePanel({
   media,
 }: {
   dataset: Dataset;
-  media: MediaContext | null;
+  media: MediaResolver | null;
 }) {
+  // Defaults to your-data-only: sections describing other people (and the
+  // message-content opt-in) start off.
   const [selected, setSelected] = useState<Set<ShareSection>>(
-    () => new Set(SHARE_SECTIONS.map((s) => s.key)),
+    () => new Set(DEFAULT_SHARE_SECTIONS),
   );
   const [state, setState] = useState<ShareState>({ step: "idle" });
   const [copied, setCopied] = useState(false);
@@ -51,6 +66,12 @@ export function SharePanel({
       }
       return next;
     });
+    setState({ step: "idle" });
+    setCopied(false);
+  };
+
+  const selectAll = (keys: ShareSection[]) => {
+    setSelected(new Set(keys));
     setState({ step: "idle" });
     setCopied(false);
   };
@@ -75,32 +96,56 @@ export function SharePanel({
       sources.stickers.length > 0 ||
       sources.gifs.length > 0
     ) {
-      await embedThumbs(summary, sources, media, (done, total) =>
-        setState({ step: "working", note: `Thumbnails ${done}/${total}…` }),
-      );
+      // Thumbnails go in last, sized to whatever room the chosen sections
+      // leave under the payload ceiling — so picking more sections shrinks
+      // the images instead of breaking the hosted share.
+      const room = MAX_SUMMARY_CHARS - JSON.stringify(summary).length;
+      if (room > 0) {
+        await embedThumbs(
+          summary,
+          sources,
+          media,
+          (done, total) =>
+            setState({ step: "working", note: `Thumbnails ${done}/${total}…` }),
+          room,
+        );
+      }
     }
     setState({ step: "working", note: "Encrypting & uploading…" });
     const base = `${location.origin}${location.pathname}`;
+    const hostedUrl = (path: string, key: string) =>
+      `${base}${buildShareHash({ kind: "telegraph", path, key })}`;
 
-    try {
-      const { payload, key } = await encryptText(JSON.stringify(summary));
-      const uploaded = await uploadShare(payload);
-      rememberShare(uploaded);
-      setState({
-        step: "ready",
-        url: `${base}${buildShareHash({ kind: "telegraph", path: uploaded.path, key })}`,
-        inline: false,
-      });
-    } catch {
-      // Telegraph unreachable/blocked — self-contained fragment link instead
-      // (without thumbnails, which would make the URL unsendable).
-      const data = await deflateText(JSON.stringify(stripThumbs(summary)));
-      setState({
-        step: "ready",
-        url: `${base}${buildShareHash({ kind: "inline", data })}`,
-        inline: true,
-      });
+    // Prefer hosting the full payload; if it doesn't fit, hosting it without
+    // thumbnails keeps every section — far better than dropping down to a
+    // link that carries only the aggregates.
+    for (const attempt of ["full", "noThumbs"] as const) {
+      const payloadSummary =
+        attempt === "full" ? summary : stripThumbs(summary);
+      try {
+        const { payload, key } = await encryptText(
+          JSON.stringify(payloadSummary),
+        );
+        const uploaded = await uploadShare(payload);
+        rememberShare(uploaded);
+        setState({
+          step: "ready",
+          url: hostedUrl(uploaded.path, key),
+          mode: attempt === "full" ? "hosted" : "hostedNoThumbs",
+        });
+        return;
+      } catch (err) {
+        debug("share upload failed", { attempt, err });
+      }
     }
+
+    // Telegraph unreachable — self-contained fragment link, aggregates only.
+    const data = await deflateText(JSON.stringify(stripHeavy(summary)));
+    setState({
+      step: "ready",
+      url: `${base}${buildShareHash({ kind: "inline", data })}`,
+      mode: "inline",
+    });
   };
 
   const copy = async (url: string) => {
@@ -112,22 +157,63 @@ export function SharePanel({
     }
   };
 
-  // The opt-in reveals Greatest hits content, so it needs that section.
-  const extraDisabled = (): boolean => !selected.has("hits");
+  // The Greatest-hits content opt-in needs that section; the identities
+  // opt-in applies to every per-chat section, so it's always available.
+  const extraDisabled = (key: ShareSection): boolean =>
+    key === "hitContent" && !selected.has("hits");
 
   return (
     <div class="share-panel">
+      <div class="share-presets">
+        <button
+          type="button"
+          class="link-button"
+          onClick={() => selectAll(ALL_SHARE_SECTIONS)}
+        >
+          Share everything
+        </button>
+        <button
+          type="button"
+          class="link-button"
+          onClick={() => selectAll(DEFAULT_SHARE_SECTIONS)}
+        >
+          Only my own data
+        </button>
+        <button type="button" class="link-button" onClick={() => selectAll([])}>
+          Clear
+        </button>
+      </div>
+
       <div class="share-options">
-        {SHARE_SECTIONS.map(({ key, label }) => (
-          <label key={key} class="share-option">
+        {SHARE_SECTIONS.filter((s) => !("aboutOthers" in s)).map((section) => (
+          <label key={section.key} class="share-option">
             <input
               type="checkbox"
-              checked={selected.has(key)}
-              onChange={() => toggle(key)}
+              checked={selected.has(section.key)}
+              onChange={() => toggle(section.key)}
             />
-            {label}
+            {section.label}
           </label>
         ))}
+      </div>
+
+      <div class="share-group">
+        <p class="share-group-head muted">
+          Includes other people&apos;s numbers — aggregated and unnamed, off by
+          default
+        </p>
+        <div class="share-options">
+          {SHARE_SECTIONS.filter((s) => "aboutOthers" in s).map((section) => (
+            <label key={section.key} class="share-option">
+              <input
+                type="checkbox"
+                checked={selected.has(section.key)}
+                onChange={() => toggle(section.key)}
+              />
+              {section.label}
+            </label>
+          ))}
+        </div>
       </div>
 
       <div class="share-extras">
@@ -135,13 +221,20 @@ export function SharePanel({
           <label key={key} class="share-option">
             <input
               type="checkbox"
-              checked={selected.has(key) && !extraDisabled()}
-              disabled={extraDisabled()}
+              checked={selected.has(key) && !extraDisabled(key)}
+              disabled={extraDisabled(key)}
               onChange={() => toggle(key)}
             />
             {label}
           </label>
         ))}
+        {selected.has("identities") && (
+          <p class="muted hint">
+            Names travel inside the link; public profile photos are loaded from
+            t.me when someone opens it, so their browser requests those images
+            from Telegram. Contacts without a public @username show initials.
+          </p>
+        )}
       </div>
 
       {state.step !== "ready" ? (
@@ -178,11 +271,17 @@ export function SharePanel({
               </button>
             )}
           </div>
-          {state.inline && (
+          {state.mode === "hostedNoThumbs" && (
+            <p class="muted">
+              Thumbnails were left out so the share fits telegra.ph&apos;s page
+              limit — every section is still included.
+            </p>
+          )}
+          {state.mode === "inline" && (
             <p class="muted">
               telegra.ph wasn&apos;t reachable, so this link carries the data
-              inside the URL itself — longer, thumbnails omitted, but works the
-              same.
+              inside the URL itself — the aggregate sections only (no thumbnails
+              or per-contact lists), to keep the link sendable.
             </p>
           )}
         </>
@@ -190,8 +289,9 @@ export function SharePanel({
 
       <p class="muted">
         The link shows an anonymized summary of the checked sections — totals,
-        charts, and emoji. Names and messages stay out unless you opt in above.
-        {state.step === "ready" && !state.inline
+        charts, and emoji, never names. Message text and media previews are only
+        included with the explicit opt-in below.
+        {state.step === "ready" && state.mode !== "inline"
           ? " Encrypted; the key exists only inside the link."
           : ""}
       </p>

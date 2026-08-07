@@ -6,30 +6,38 @@
 [![Deploy](https://github.com/Allless/retrogram/actions/workflows/deploy.yml/badge.svg)](https://github.com/Allless/retrogram/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-b8441f.svg)](LICENSE)
 
-Rewindly is a personal analytics tool for Telegram that runs entirely in the
-browser. It logs into your account as a linked device, reads the last 12
-months of your history locally, and presents the results as a slide deck.
-There is no server and nothing is uploaded.
+Rewindly is a personal chat-analytics tool that runs entirely in the browser
+and presents your year as a slide deck. **Telegram** is the main flow: it logs
+in as a linked device and reads the last 12 months of your history locally.
+**WhatsApp** is in beta: you drop in "Export chat" files and they are parsed
+on-device. There is no server and nothing is uploaded.
 
 **Live**: https://allless.github.io/retrogram/ (will move to
 `retrogram.lessly.me` once the domain is set up)
 
 ## Features
 
-- Message volume per month (direct chats)
-- Activity heatmap by weekday and hour
-- Top DMs and top groups, with profile photos
-- Response times: median reply time for both sides, and the chats where you
-  or the other person take longest to reply
+- How much you talked: messages and words per month, sent and received
+- When you're awake: activity heatmap by weekday and hour
+- Your people and the groups you live in, with profile photos
+- How fast you reply: median reply times, and who answers fastest
+- Who texts first: the share of conversations each side starts
+- Ghosted: conversation attempts that never got an answer, both ways
+- How you text: bursts vs. long messages, per side and per contact
 - Gone quiet: dormant conversations and who sent the last message
-- Most-used emoji and most-used reactions, sent and received
+- Your emoji fingerprint and the reactions you send and receive
 - Greatest hits: your most-reacted messages, with photos and video frames
-- Streaks: consecutive active days
-- Top stickers and GIFs, animated where possible
-- Share links: an anonymized summary anyone can open without logging in,
-  with a per-section picker
+- Streaks, sticker and GIF rotations, and a trophy shelf of awards
+- Share links: a summary anyone can open without logging in, with a
+  per-section picker; sections about other people are off by default
+
+Reply times, initiations and ghosting are measured per detected conversation
+session — see [METHODOLOGY.md](METHODOLOGY.md) for the method and the
+research it follows.
 
 ## How it works
+
+**Telegram**
 
 1. Log in with the QR code (desktop) or your phone number and a login code
    (mobile — Telegram's mobile apps don't confirm same-device QR links).
@@ -38,6 +46,18 @@ There is no server and nothing is uploaded.
 2. The last 12 months of history are fetched over MTProto and analyzed in
    the browser. Results are cached in IndexedDB, so reopening is instant.
 3. The only network traffic goes to Telegram's servers.
+
+**WhatsApp (beta, `?platform=whatsapp`)**
+
+1. In WhatsApp: open a chat → ⋮ → More → Export chat (without media), and
+   send the file to this device. Repeat for the chats you care about.
+2. Drop the `.txt` files (or the `.zip` they came in) onto the page and pick
+   which participant is you. Parsing happens in the tab; no login exists.
+3. Coverage is whatever you exported, so the deck says "partial history".
+   Exports carry no reactions or media, so those slides are hidden.
+
+Each platform lives behind one interface in `src/ts/platforms/`; everything
+downstream — stats, deck, sharing — is platform-blind.
 
 ## Privacy
 
@@ -127,5 +147,6 @@ Telegram clients; see the FAQ.
 
 ## Disclaimer
 
-Rewindly is not affiliated with, endorsed by, or sponsored by Telegram.
-"Telegram" is a trademark of its respective owner.
+Rewindly is not affiliated with, endorsed by, or sponsored by Telegram or
+WhatsApp. "Telegram" and "WhatsApp" are trademarks of their respective
+owners.

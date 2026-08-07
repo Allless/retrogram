@@ -14,7 +14,7 @@
 import { debug } from "../debug";
 import { getHitPreview, getMediaPreview } from "../media/downloadMedia";
 
-import type { MediaContext, MediaPreview } from "../media/downloadMedia";
+import type { MediaResolver, MediaPreview } from "../media/downloadMedia";
 import type { SharedSummary, ThumbSources } from "./summary";
 
 /**
@@ -22,7 +22,8 @@ import type { SharedSummary, ThumbSources } from "./summary";
  * base64 inflate the JSON by ~4/3, so ~40KB thumbs + a few KB of stats ≈ 59KB,
  * under Telegraph's 64KB page cap (and the 60K upload guard).
  */
-const THUMB_BUDGET = 40_000;
+/** Fallback budget when the caller doesn't measure the room left for images. */
+const THUMB_BUDGET = 28_000;
 
 // Hits are real photos/video frames; stickers and GIFs are small, simple
 // images — weight the budget split and cap dimensions accordingly.
@@ -190,8 +191,11 @@ function interleave(groups: ThumbJob[][]): ThumbJob[] {
 export async function embedThumbs(
   summary: SharedSummary,
   sources: ThumbSources,
-  media: MediaContext | null,
+  media: MediaResolver | null,
   onProgress?: (done: number, total: number) => void,
+  /** Characters available for images — what's left of the payload ceiling
+   * after the structural sections. Defaults to a conservative constant. */
+  budget: number = THUMB_BUDGET,
 ): Promise<void> {
   const hitJobs: ThumbJob[] = [];
   for (const [i, messageId] of sources.hits.entries()) {
@@ -246,11 +250,11 @@ export async function embedThumbs(
   try {
     // Pass 1: allocate from the remaining budget by weight — slack from
     // small images flows forward to later ones.
-    let budget = THUMB_BUDGET;
+    let remaining = budget;
     let weightLeft = queue.reduce((sum, job) => sum + job.weight, 0);
     const failed: number[] = [];
     for (const [i, job] of queue.entries()) {
-      const alloc = Math.floor((budget * job.weight) / weightLeft);
+      const alloc = Math.floor((remaining * job.weight) / weightLeft);
       weightLeft -= job.weight;
       const preview = await downloads[i];
       previews[i] = preview;
@@ -266,7 +270,7 @@ export async function embedThumbs(
       }
       const thumb = await toThumbWithin(preview, job.maxPx, alloc);
       if (thumb) {
-        budget -= thumb.length;
+        remaining -= thumb.length;
         job.assign(thumb);
         debug(`thumb job ${i} (${job.label}): embedded ${thumb.length} chars`);
       } else {
@@ -281,12 +285,12 @@ export async function embedThumbs(
     for (const i of failed) {
       const job = queue[i];
       const preview = previews[i];
-      const alloc = Math.floor((budget * job.weight) / failWeight);
+      const alloc = Math.floor((remaining * job.weight) / failWeight);
       failWeight -= job.weight;
       if (!preview || alloc < MIN_ALLOC) continue;
       const thumb = await toThumbWithin(preview, job.maxPx, alloc);
       if (thumb) {
-        budget -= thumb.length;
+        remaining -= thumb.length;
         job.assign(thumb);
         debug(
           `thumb job ${i} (${job.label}): embedded ${thumb.length} chars on retry`,

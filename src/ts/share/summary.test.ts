@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import { sampleDataset } from "../model/fixture";
+import type { Dataset } from "../model/types";
 import { volumeOverTime } from "../stats/volumeOverTime";
-import { buildShare, isSharedSummary, stripThumbs } from "./summary";
+import {
+  ALL_SHARE_SECTIONS,
+  buildShare,
+  isSharedSummary,
+  SHARE_VERSION,
+  shareStatus,
+  stripThumbs,
+} from "./summary";
 
 describe("buildShare", () => {
   const { summary, thumbSources } = buildShare(sampleDataset);
   const serialized = JSON.stringify(summary);
 
   it("carries the aggregate stats", () => {
-    expect(summary.v).toBe(1);
+    expect(summary.v).toBe(SHARE_VERSION);
     expect(summary.messageCount).toBe(sampleDataset.meta.messageCount);
     expect(summary.volume).toEqual(volumeOverTime.compute(sampleDataset));
     expect(summary.heatmap?.slots).toHaveLength(168);
@@ -19,17 +27,17 @@ describe("buildShare", () => {
     expect(summary.stickerTotal).toBeGreaterThan(0);
   });
 
-  it("leaks no identities: no chat titles, usernames, or ids", () => {
+  it("leaks no private peer's identity, and never a peer id", () => {
     for (const chat of Object.values(sampleDataset.chats)) {
+      // Peers with a public @username may appear by name — that handle is
+      // public on Telegram. Everyone else must be relabelled.
+      if (chat.username) continue;
       expect(serialized).not.toContain(chat.title);
     }
     for (const contact of Object.values(sampleDataset.contacts)) {
       // Skip self: "Me" is a substring of field names like "yourMedianSeconds".
-      if (contact.isSelf) continue;
+      if (contact.isSelf || contact.username) continue;
       expect(serialized).not.toContain(contact.displayName);
-      if (contact.username) {
-        expect(serialized).not.toContain(contact.username);
-      }
     }
     expect(serialized).not.toContain("user:");
     expect(serialized).not.toContain("chat:");
@@ -102,5 +110,126 @@ describe("buildShare", () => {
     expect(isSharedSummary(null)).toBe(false);
     expect(isSharedSummary({})).toBe(false);
     expect(isSharedSummary({ v: 2, messageCount: 1 })).toBe(false);
+  });
+});
+
+/** Everything except the identities opt-in — the anonymizing default. */
+const ANON_SECTIONS = ALL_SHARE_SECTIONS.filter((key) => key !== "identities");
+
+describe("public peers in shares", () => {
+  const publicDataset: Dataset = {
+    ...sampleDataset,
+    chats: {
+      ...sampleDataset.chats,
+      "chat:public": {
+        id: "chat:public",
+        type: "channel",
+        title: "Public Channel",
+        username: "publicchannel",
+      },
+      "user:public": {
+        id: "user:public",
+        type: "private",
+        title: "Public Person",
+        username: "publicperson",
+      },
+      "user:private": {
+        id: "user:private",
+        type: "private",
+        title: "Private Person",
+      },
+    },
+  };
+
+  it("names publicly addressable peers and hides private ones", () => {
+    const messages = [
+      ...["chat:public", "user:public", "user:private"].flatMap((chatId, c) =>
+        Array.from({ length: 8 }, (_, i) => ({
+          ...sampleDataset.messages[0],
+          id: `${chatId}:${i}`,
+          chatId,
+          direction: i % 2 === 0 ? ("sent" as const) : ("received" as const),
+          timestamp: sampleDataset.meta.dateRange.from + (c * 40 + i) * 60_000,
+        })),
+      ),
+    ];
+    const build = (keys: readonly string[]) =>
+      JSON.stringify(
+        buildShare({ ...publicDataset, messages }, new Set(keys as never))
+          .summary,
+      );
+
+    const anonymized = build(ANON_SECTIONS);
+    expect(anonymized).toContain("Public Channel");
+    expect(anonymized).toContain("Public Person");
+    expect(anonymized).not.toContain("Private Person");
+
+    // With the identities opt-in, private peers are named too.
+    const named = build(ALL_SHARE_SECTIONS);
+    expect(named).toContain("Private Person");
+
+    const serialized = anonymized;
+    // ids never travel, public or not
+    expect(serialized).not.toContain("chat:public");
+    expect(serialized).not.toContain("user:public");
+  });
+});
+
+describe("anonymous labels", () => {
+  it("numbers contacts and groups on separate counters", () => {
+    const chats: Dataset["chats"] = {};
+    const messages = [];
+    for (const [i, type] of (
+      ["private", "group", "private", "group"] as const
+    ).entries()) {
+      const chatId = `${type === "group" ? "chat" : "user"}:${i}`;
+      chats[chatId] = { id: chatId, type, title: `Peer ${i}` };
+      for (let m = 0; m < 8; m++) {
+        messages.push({
+          ...sampleDataset.messages[0],
+          id: `${chatId}:${m}`,
+          chatId,
+          direction: m % 2 === 0 ? ("sent" as const) : ("received" as const),
+          timestamp: sampleDataset.meta.dateRange.from + (i * 40 + m) * 60_000,
+        });
+      }
+    }
+    const { summary } = buildShare(
+      { ...sampleDataset, chats, messages },
+      new Set(ANON_SECTIONS),
+    );
+    const serialized = JSON.stringify(summary);
+    expect(serialized).toContain("Contact 1");
+    expect(serialized).toContain("Contact 2");
+    expect(serialized).toContain("Group 1");
+    expect(serialized).toContain("Group 2");
+    // No shared sequence: labels never skip numbers.
+    expect(serialized).not.toContain("Contact 3");
+    expect(serialized).not.toContain("Group 3");
+  });
+});
+
+describe("share version gating", () => {
+  it("accepts the current payload", () => {
+    const { summary } = buildShare(sampleDataset);
+    expect(shareStatus(JSON.parse(JSON.stringify(summary)))).toBe("ok");
+  });
+
+  it("rejects an older payload as unsupported, not invalid", () => {
+    const { summary } = buildShare(sampleDataset);
+    const old = { ...JSON.parse(JSON.stringify(summary)), v: 1 };
+    expect(shareStatus(old)).toBe("unsupported");
+  });
+
+  it("rejects junk as invalid", () => {
+    expect(shareStatus({ hello: "world" })).toBe("invalid");
+    expect(shareStatus(null)).toBe("invalid");
+    // v matches but the payload is missing required fields
+    expect(shareStatus({ v: SHARE_VERSION })).toBe("invalid");
+  });
+
+  it("always carries who shared it", () => {
+    const { summary } = buildShare(sampleDataset);
+    expect(summary.self.title).toBe(sampleDataset.self.displayName);
   });
 });

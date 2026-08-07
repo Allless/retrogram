@@ -1,12 +1,21 @@
 import { activityHeatmap } from "../stats/activityHeatmap";
 import { emojiFrequency } from "../stats/emojiFrequency";
-import { MEDIA_LABELS } from "../stats/greatestHits";
+import { ghostedChats } from "../stats/ghostedChats";
+import { greatestHits, MEDIA_LABELS } from "../stats/greatestHits";
+import { leftOnRead } from "../stats/leftOnRead";
 import { reactions } from "../stats/reactions";
 import { responseTimes } from "../stats/responseTimes";
 import { streaks } from "../stats/streaks";
+import { textingStyles } from "../stats/textingStyles";
+import { topDms, topGroups } from "../stats/topContacts";
+import { trophyShelf } from "../stats/trophyShelf";
 import { volumeOverTime } from "../stats/volumeOverTime";
+import { whoTextsFirst } from "../stats/whoTextsFirst";
+import { AvatarContext, PeerAvatar } from "../media/avatars";
+import { SlideDeck, type Slide } from "./SlideDeck";
 import RewindGlyph from "../../rewind.svg?react";
 
+import type { ComponentChildren } from "preact";
 import type { SharedSummary, SharedTopMedia } from "../share/summary";
 
 function TopMediaRow({
@@ -42,10 +51,10 @@ function TopMediaRow({
 }
 
 /**
- * Read-only view of a shared, anonymized summary — reuses the stat modules'
- * own Cards with results reconstructed from the payload, rendering only the
- * sections the sharer chose to include. No login required: this renders for
- * anyone who opens a share link.
+ * Read-only view of a shared summary, rendered as the same slide deck as the
+ * dashboard: the stat modules' own Cards, fed results reconstructed from the
+ * payload, in the same order with the same titles and icons. Only the sections
+ * the sharer included appear. No login required.
  */
 export function SharedReport({
   summary,
@@ -54,185 +63,201 @@ export function SharedReport({
   summary: SharedSummary;
   onMakeYourOwn: () => void;
 }) {
-  const hasResponse =
+  const slides: Slide[] = [];
+  const add = (
+    stat: { id: string; title: string; icon: string; description: string },
+    content: ComponentChildren,
+  ) => slides.push({ ...stat, content });
+
+  if (summary.topChatMessages !== undefined) {
+    add(
+      {
+        id: "headline",
+        title: "The year at a glance",
+        icon: "✨",
+        description: "The headline numbers from this share.",
+      },
+      <dl class="stat-figures">
+        <div>
+          <dt>Messages</dt>
+          <dd>{summary.messageCount.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Busiest DM</dt>
+          <dd>{summary.topChatMessages.toLocaleString()} msgs</dd>
+        </div>
+        <div>
+          <dt>Top message</dt>
+          <dd>
+            {summary.topHitReactions ?? 0}×{" "}
+            {(summary.topHitEmoji ?? []).slice(0, 3).join("")}
+          </dd>
+        </div>
+        <div>
+          <dt>Longest streak</dt>
+          <dd>{summary.longestStreakDays ?? 0} days</dd>
+        </div>
+      </dl>,
+    );
+  }
+  if (summary.volume) {
+    add(volumeOverTime, <volumeOverTime.Card result={summary.volume} />);
+  }
+  if (summary.heatmap) {
+    add(activityHeatmap, <activityHeatmap.Card result={summary.heatmap} />);
+  }
+  if (summary.people && summary.people.chats.length > 0) {
+    add(topDms, <topDms.Card result={summary.people} />);
+  }
+  if (summary.groups && summary.groups.chats.length > 0) {
+    add(topGroups, <topGroups.Card result={summary.groups} />);
+  }
+  if (summary.response) {
+    const response = summary.response;
+    if (
+      response.yourMedianSeconds !== null ||
+      response.theirMedianSeconds !== null ||
+      response.perChat.length > 0
+    ) {
+      add(responseTimes, <responseTimes.Card result={response} />);
+    }
+    if (response.initiations) {
+      add(whoTextsFirst, <whoTextsFirst.Card result={response} />);
+    }
+    if (response.theyGhost.length > 0 || response.youGhost.length > 0) {
+      add(leftOnRead, <leftOnRead.Card result={response} />);
+    }
+  } else if (
     summary.yourMedianSeconds !== undefined ||
-    summary.theirMedianSeconds !== undefined;
-  const hasReactions =
+    summary.theirMedianSeconds !== undefined
+  ) {
+    // Medians shared without any per-chat section.
+    add(
+      responseTimes,
+      <responseTimes.Card
+        result={{
+          yourMedianSeconds: summary.yourMedianSeconds ?? null,
+          theirMedianSeconds: summary.theirMedianSeconds ?? null,
+          initiations: null,
+          perChat: [],
+          theyReplyFastest: [],
+          youReplyFastest: [],
+          youStartMost: [],
+          theyStartMost: [],
+          theyGhost: [],
+          youGhost: [],
+        }}
+      />,
+    );
+  }
+  if (summary.styles) {
+    add(textingStyles, <textingStyles.Card result={summary.styles} />);
+  }
+  if (summary.quiet && summary.quiet.chats.length > 0) {
+    add(ghostedChats, <ghostedChats.Card result={summary.quiet} />);
+  }
+  if (summary.topEmoji) {
+    add(
+      emojiFrequency,
+      <emojiFrequency.Card result={{ topEmoji: summary.topEmoji }} />,
+    );
+  }
+  if (
     summary.reactionsGiven !== undefined ||
-    summary.reactionsReceived !== undefined;
+    summary.reactionsReceived !== undefined
+  ) {
+    add(
+      reactions,
+      <reactions.Card
+        result={{
+          given: summary.reactionsGiven ?? [],
+          received: summary.reactionsReceived ?? [],
+        }}
+      />,
+    );
+  }
+  if (summary.stickerTotal !== undefined || summary.gifTotal !== undefined) {
+    add(
+      {
+        id: "shared-media",
+        title: "Sticker & GIF rotation",
+        icon: "🧩",
+        description: "The ones they send most.",
+      },
+      <div class="response-times">
+        <TopMediaRow
+          heading="Stickers"
+          total={summary.stickerTotal ?? 0}
+          top={summary.stickerTop ?? []}
+        />
+        <TopMediaRow
+          heading="GIFs"
+          total={summary.gifTotal ?? 0}
+          top={summary.gifTop ?? []}
+        />
+      </div>,
+    );
+  }
+  if (summary.streaks) {
+    add(streaks, <streaks.Card result={summary.streaks} />);
+  }
+  if (summary.hits && summary.hits.length > 0) {
+    const hits = summary.hits;
+    add(
+      greatestHits,
+      <ol class="hits">
+        {hits.map((hit, i) => (
+          <li key={i} class="hit">
+            <div class="hit-head">
+              <span class="hit-count">{hit.reactionCount}</span>
+              <span class="hit-emoji">{hit.reactionEmoji.join(" ")}</span>
+            </div>
+            {hit.thumb && <img class="hit-media" src={hit.thumb} alt="" />}
+            {hit.text ? (
+              <blockquote class="hit-text">{hit.text}</blockquote>
+            ) : (
+              !hit.thumb && (
+                <blockquote class="hit-text muted">
+                  {MEDIA_LABELS[hit.mediaType]}
+                </blockquote>
+              )
+            )}
+          </li>
+        ))}
+      </ol>,
+    );
+  }
+  if (summary.trophies && summary.trophies.trophies.length > 0) {
+    add(trophyShelf, <trophyShelf.Card result={summary.trophies} />);
+  }
 
   return (
-    <section class="dashboard">
-      <div class="dashboard-head">
-        <h2>A shared Telegram year</h2>
-        <button type="button" class="btn-primary" onClick={onMakeYourOwn}>
-          Make your own <RewindGlyph class="btn-glyph" />
-        </button>
-      </div>
-
-      <p class="muted">
-        Someone shared their Rewindly summary with you —{" "}
-        {summary.messageCount.toLocaleString()} messages, anonymized: aggregate
-        numbers only, no names, no message text.
-      </p>
-
-      <div class="stat-grid">
-        {summary.topChatMessages !== undefined && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>Headline numbers</h3>
-              <p class="muted">The year at a glance.</p>
-            </header>
-            <dl class="stat-figures">
-              <div>
-                <dt>Messages</dt>
-                <dd>{summary.messageCount.toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt>Busiest DM</dt>
-                <dd>{summary.topChatMessages.toLocaleString()} msgs</dd>
-              </div>
-              <div>
-                <dt>Top message</dt>
-                <dd>
-                  {summary.topHitReactions ?? 0}×{" "}
-                  {(summary.topHitEmoji ?? []).slice(0, 3).join("")}
-                </dd>
-              </div>
-              <div>
-                <dt>Longest streak</dt>
-                <dd>{summary.longestStreakDays ?? 0} days</dd>
-              </div>
-            </dl>
-          </article>
-        )}
-
-        {summary.volume && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{volumeOverTime.title}</h3>
-              <p class="muted">{volumeOverTime.description}</p>
-            </header>
-            <volumeOverTime.Card result={summary.volume} />
-          </article>
-        )}
-
-        {summary.heatmap && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{activityHeatmap.title}</h3>
-              <p class="muted">{activityHeatmap.description}</p>
-            </header>
-            <activityHeatmap.Card result={summary.heatmap} />
-          </article>
-        )}
-
-        {hasResponse && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{responseTimes.title}</h3>
-              <p class="muted">How fast they reply — medians only.</p>
-            </header>
-            <responseTimes.Card
-              result={{
-                yourMedianSeconds: summary.yourMedianSeconds ?? null,
-                theirMedianSeconds: summary.theirMedianSeconds ?? null,
-                perChat: [],
-                theyGhost: [],
-                youGhost: [],
-              }}
+    // Public profile photos load straight from t.me here: there's no session
+    // to download with, and these images are already public.
+    <AvatarContext.Provider
+      value={{ request: () => undefined, urls: {}, publicPhotos: true }}
+    >
+      <SlideDeck slides={slides}>
+        <div class="dashboard-head">
+          <h2 class="shared-title">
+            <PeerAvatar
+              peerId="shared:self"
+              title={summary.self.title}
+              username={summary.self.username}
             />
-          </article>
-        )}
+            {summary.self.title}&apos;s year, rewound
+          </h2>
+          <button type="button" class="btn-primary" onClick={onMakeYourOwn}>
+            Make your own <RewindGlyph class="btn-glyph" />
+          </button>
+        </div>
 
-        {summary.topEmoji && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{emojiFrequency.title}</h3>
-              <p class="muted">{emojiFrequency.description}</p>
-            </header>
-            <emojiFrequency.Card result={{ topEmoji: summary.topEmoji }} />
-          </article>
-        )}
-
-        {hasReactions && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{reactions.title}</h3>
-              <p class="muted">{reactions.description}</p>
-            </header>
-            <reactions.Card
-              result={{
-                given: summary.reactionsGiven ?? [],
-                received: summary.reactionsReceived ?? [],
-              }}
-            />
-          </article>
-        )}
-
-        {summary.streaks && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>{streaks.title}</h3>
-              <p class="muted">{streaks.description}</p>
-            </header>
-            <streaks.Card result={summary.streaks} />
-          </article>
-        )}
-
-        {summary.hits && summary.hits.length > 0 && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>Greatest hits</h3>
-              <p class="muted">Their most-reacted messages.</p>
-            </header>
-            <ol class="hits">
-              {summary.hits.map((hit, i) => (
-                <li key={i} class="hit">
-                  <div class="hit-head">
-                    <span class="hit-count">{hit.reactionCount}</span>
-                    <span class="hit-emoji">{hit.reactionEmoji.join(" ")}</span>
-                  </div>
-                  {hit.thumb && (
-                    <img class="hit-media" src={hit.thumb} alt="" />
-                  )}
-                  {hit.text ? (
-                    <blockquote class="hit-text">{hit.text}</blockquote>
-                  ) : (
-                    !hit.thumb && (
-                      <blockquote class="hit-text muted">
-                        {MEDIA_LABELS[hit.mediaType]}
-                      </blockquote>
-                    )
-                  )}
-                </li>
-              ))}
-            </ol>
-          </article>
-        )}
-
-        {(summary.stickerTotal !== undefined ||
-          summary.gifTotal !== undefined) && (
-          <article class="stat-card">
-            <header class="stat-card-head">
-              <h3>Top stickers &amp; GIFs</h3>
-              <p class="muted">The ones they send most.</p>
-            </header>
-            <div class="response-times">
-              <TopMediaRow
-                heading="Stickers"
-                total={summary.stickerTotal ?? 0}
-                top={summary.stickerTop ?? []}
-              />
-              <TopMediaRow
-                heading="GIFs"
-                total={summary.gifTotal ?? 0}
-                top={summary.gifTop ?? []}
-              />
-            </div>
-          </article>
-        )}
-      </div>
-    </section>
+        <p class="muted">
+          {summary.self.title} shared their Rewindly year with you —{" "}
+          {summary.messageCount.toLocaleString()} messages. Only the sections
+          they picked are here.
+        </p>
+      </SlideDeck>
+    </AvatarContext.Provider>
   );
 }

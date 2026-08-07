@@ -38,7 +38,14 @@ async function call(
 }
 
 /** Telegraph rejects pages over 64KB; refuse early so the caller falls back. */
-const MAX_PAYLOAD_CHARS = 60_000;
+export const MAX_PAYLOAD_CHARS = 60_000;
+
+/**
+ * Plaintext ceiling: encryption base64-expands by 4/3, so this is what a
+ * summary may weigh before it stops fitting a Telegraph page. Callers size
+ * thumbnails against the room left over after the structural sections.
+ */
+export const MAX_SUMMARY_CHARS = Math.floor((MAX_PAYLOAD_CHARS * 3) / 4) - 1000;
 
 /** Upload a share payload; returns the page path and its edit token. */
 export async function uploadShare(payload: string): Promise<TelegraphShare> {

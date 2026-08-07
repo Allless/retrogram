@@ -403,6 +403,75 @@ a:hover {
   font-size: 0.9rem;
 }
 
+/* WhatsApp beta connect */
+
+.beta-badge {
+  font-family: var(--font);
+  font-size: 0.5em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.dropzone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 96px;
+  padding: 16px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-align: center;
+  cursor: pointer;
+}
+
+.dropzone-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dropzone-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-list {
+  list-style: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.self-picker {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.self-option {
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.beta-link {
+  text-align: center;
+}
+
 .phone-fallback {
   width: 100%;
   display: flex;
@@ -475,8 +544,23 @@ a:hover {
 .share-options {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+}
+
+/* Sections about other people, grouped under one note instead of tagging
+   every row (which wrapped the labels into ragged columns). */
+.share-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.share-group-head {
+  font-size: 0.78rem;
 }
 
 .share-option {
@@ -1067,4 +1151,64 @@ a:hover {
 
 .media-count {
   font-size: 0.8rem;
+}
+
+/* Trophy shelf */
+
+.trophy-shelf {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trophy {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "award detail" "winner detail";
+  align-items: center;
+  gap: 2px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trophy:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.trophy-award {
+  grid-area: award;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.trophy-winner {
+  grid-area: winner;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trophy .chat-detail {
+  grid-area: detail;
+  text-align: right;
+}
+
+.slide-icon {
+  margin-right: 0.4em;
+  font-size: 0.95em;
+}
+
+.share-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.shared-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
