@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 
 import type { Dataset } from "../model/types";
 import { tokenize } from "./shared/text";
+import { withEmojiPresentation } from "./shared/emoji";
 import { defineStat } from "./registry";
 
 export interface EmojiCount {
@@ -45,7 +46,7 @@ const Card: FunctionComponent<{ result: EmojiFrequencyResult }> = ({
     <ul class="emoji-row">
       {result.topEmoji.map(({ emoji, count }) => (
         <li key={emoji} class="emoji-item" title={`${count}×`}>
-          <span class="emoji-glyph">{emoji}</span>
+          <span class="emoji-glyph">{withEmojiPresentation(emoji)}</span>
           <span class="emoji-count">{count}</span>
         </li>
       ))}
