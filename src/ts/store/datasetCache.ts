@@ -21,7 +21,7 @@ const BLOB_STORE = "blobs";
  * (e.g. media classification), so stale caches re-ingest instead of silently
  * serving data the fix never touched.
  */
-const INGEST_VERSION = 6;
+const INGEST_VERSION = 7;
 
 interface CachedEntry {
   version: number;
@@ -97,13 +97,27 @@ export async function loadDataset(selfId: string): Promise<Dataset | null> {
   }
 }
 
-export async function clearDataset(): Promise<void> {
+/** Clear stored datasets and blobs — all of them, or only keys matching. */
+export async function clearDataset(
+  shouldClear?: (key: string) => boolean,
+): Promise<void> {
   if (!getIndexedDB()) return;
   const db = await openDb();
   try {
     const tx = db.transaction([STORE, BLOB_STORE], "readwrite");
-    await promisifyRequest(tx.objectStore(STORE).clear());
-    await promisifyRequest(tx.objectStore(BLOB_STORE).clear());
+    for (const name of [STORE, BLOB_STORE]) {
+      const store = tx.objectStore(name);
+      if (!shouldClear) {
+        await promisifyRequest(store.clear());
+        continue;
+      }
+      const keys = await promisifyRequest(store.getAllKeys());
+      for (const key of keys) {
+        if (typeof key === "string" && shouldClear(key)) {
+          await promisifyRequest(store.delete(key));
+        }
+      }
+    }
   } finally {
     db.close();
   }

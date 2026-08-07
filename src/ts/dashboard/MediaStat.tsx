@@ -5,14 +5,14 @@ import { getMediaPreview } from "../media/downloadMedia";
 import { enqueueFetch } from "../media/fetchQueue";
 import { SlidePriorityContext } from "../media/slidePriority";
 
-import type { MediaContext, MediaPreview } from "../media/downloadMedia";
+import type { MediaResolver, MediaPreview } from "../media/downloadMedia";
 import type { Dataset, MediaType } from "../model/types";
 
 const TOP = 20;
 
 interface MediaStatProps {
   dataset: Dataset;
-  media: MediaContext | null;
+  media: MediaResolver | null;
   mediaType: MediaType;
   emptyLabel: string;
 }

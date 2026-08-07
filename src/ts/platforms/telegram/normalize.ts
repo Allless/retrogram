@@ -12,7 +12,7 @@ import type {
   MediaType,
   Message,
   MessageDirection,
-} from "../model/types";
+} from "../../model/types";
 
 /** Only the peer fields ingestion actually extracts from gramjs. */
 export interface RawPeer {
@@ -21,6 +21,7 @@ export interface RawPeer {
   title: string;
   username?: string;
   isSelf?: boolean;
+  isBot?: boolean;
   memberCount?: number;
 }
 
@@ -172,6 +173,9 @@ export function normalizePeerToChat(raw: RawPeer): Chat {
   }
   if (raw.memberCount !== undefined) {
     chat.memberCount = raw.memberCount;
+  }
+  if (raw.isBot) {
+    chat.isBot = true;
   }
   return chat;
 }

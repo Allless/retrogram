@@ -9,7 +9,13 @@
 
 import type { TelegramClient } from "telegram";
 
-import type { Chat, Contact, Dataset, Message, PeerId } from "../model/types";
+import type {
+  Chat,
+  Contact,
+  Dataset,
+  Message,
+  PeerId,
+} from "../../model/types";
 import { withFloodRetry } from "./backoff";
 import {
   mediaKindOf,
@@ -317,6 +323,7 @@ export async function ingest(
       kind,
       title,
       username: readString(entity?.username),
+      isBot: entity?.bot === true,
       memberCount: readNumber(entity?.participantsCount),
     };
     chats[chatId] = normalizePeerToChat(chatPeer);

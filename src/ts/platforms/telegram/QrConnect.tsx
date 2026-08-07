@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import QRCode from "qrcode";
 
 import { startPhoneLogin, startQrLogin } from "./qrLogin";
-import { REPO_URL } from "../links";
+import { REPO_URL } from "../../links";
 
 import type { TelegramClient } from "telegram";
 

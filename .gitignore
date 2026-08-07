@@ -3,3 +3,7 @@ dist
 .DS_Store
 .env
 .env.local
+
+# Private test data: real chat exports — never commit, never read raw
+/testdata/
+/WhatsApp Chat*.zip

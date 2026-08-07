@@ -22,6 +22,7 @@ export interface Chat {
   type: ChatType;
   title: string;
   username?: string; // public @username, if any → enables a t.me link
+  isBot?: boolean; // DM with a bot account
   memberCount?: number;
 }
 
@@ -73,6 +74,7 @@ export interface DatasetMeta {
   dateRange: { from: number; to: number };
   timezone: string; // IANA tz used for all bucketing, e.g. "Europe/Berlin"
   partial: boolean; // true if the fetch was capped, interrupted, or rate-limited short
+  platform?: "telegram" | "whatsapp"; // absent on datasets cached before platforms existed
 }
 
 export interface Dataset {

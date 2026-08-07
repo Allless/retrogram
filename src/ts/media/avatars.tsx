@@ -7,7 +7,7 @@
  */
 
 import { createContext } from "preact";
-import { useContext, useEffect } from "preact/hooks";
+import { useContext, useEffect, useState } from "preact/hooks";
 
 import { SlidePriorityContext } from "./slidePriority";
 
@@ -16,6 +16,13 @@ export interface AvatarSource {
   request: (peerId: string, priority?: number) => void;
   /** peerId → object URL, or null when the download failed/unavailable. */
   urls: Record<string, string | null>;
+  /**
+   * Allow loading public profile photos straight from t.me (no session, no
+   * API). Only the shared-report view enables it: there is no client to
+   * download with, and the photos are already public. It does mean the
+   * viewer's browser requests those images from Telegram.
+   */
+  publicPhotos?: boolean;
 }
 
 export const AvatarContext = createContext<AvatarSource>({
@@ -40,14 +47,38 @@ export function avatarHue(title: string): number {
   return hash;
 }
 
-export function Avatar({ peerId, title }: { peerId: string; title: string }) {
-  const { request, urls } = useContext(AvatarContext);
+/** Telegram's public userpic endpoint — works for any public @username. */
+const publicPhotoUrl = (username: string) =>
+  `https://t.me/i/userpic/320/${encodeURIComponent(username)}.jpg`;
+
+export function Avatar({
+  peerId,
+  title,
+  username,
+}: {
+  peerId: string;
+  title: string;
+  username?: string;
+}) {
+  const { request, urls, publicPhotos } = useContext(AvatarContext);
   const priority = useContext(SlidePriorityContext);
+  const [publicFailed, setPublicFailed] = useState(false);
   useEffect(() => request(peerId, priority), [peerId, priority, request]);
 
   const url = urls[peerId];
   if (url) {
     return <img class="avatar avatar-img" src={url} alt="" loading="lazy" />;
+  }
+  if (publicPhotos && username && !publicFailed) {
+    return (
+      <img
+        class="avatar avatar-img"
+        src={publicPhotoUrl(username)}
+        alt=""
+        loading="lazy"
+        onError={() => setPublicFailed(true)}
+      />
+    );
   }
   return (
     <span
@@ -80,7 +111,7 @@ interface PeerProps {
 /** An `Avatar` that opens the chat in Telegram when the peer is linkable. */
 export function PeerAvatar({ peerId, title, username }: PeerProps) {
   const link = peerLink(peerId, username);
-  const avatar = <Avatar peerId={peerId} title={title} />;
+  const avatar = <Avatar peerId={peerId} title={title} username={username} />;
   if (!link) return avatar;
   return (
     <a

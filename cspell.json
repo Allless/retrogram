@@ -8,14 +8,16 @@
     "favicon",
     "gifs",
     "gramjs",
-    "scrollsnapchanging",
     "Lessly",
     "MTProto",
+    "persistable",
     "preact",
     "qrcode",
     "retrogram",
     "rewindly",
+    "scrollsnapchanging",
     "Telegram",
+    "tgsticker",
     "vitest",
     "Wrapped"
   ]
