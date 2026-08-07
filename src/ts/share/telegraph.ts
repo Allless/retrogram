@@ -42,21 +42,24 @@ async function call(
 export const MAX_PAYLOAD_CHARS = 60_000;
 
 /**
- * Plaintext ceiling: encryption base64-expands by 4/3, so this is what a
- * summary may weigh before it stops fitting a Telegraph page. Callers size
- * thumbnails against the room left over after the structural sections.
+ * How many pages a single share may span. Each page is one more anonymous
+ * upload and one more path in the link; in exchange the payload budget — and
+ * with it the thumbnail resolution that fits inside — scales linearly.
  */
-export const MAX_SUMMARY_CHARS = Math.floor((MAX_PAYLOAD_CHARS * 3) / 4) - 1000;
+export const MAX_SHARE_PAGES = 2;
 
 /** Total ciphertext a share may carry, across all its pages. */
 export function shareCapacityChars(): number {
   return MAX_PAYLOAD_CHARS * MAX_SHARE_PAGES;
 }
 
-/** How many pages a single share may span. Raising this multiplies the
- * budget (and the thumbnail resolution that fits inside it) at the cost of
- * one more upload per page and a slightly longer link. */
-export const MAX_SHARE_PAGES = 1;
+/**
+ * Plaintext ceiling: encryption base64-expands by 4/3, so this is what a
+ * summary may weigh before it stops fitting the share's pages. Callers size
+ * thumbnails against the room left over after the structural sections.
+ */
+export const MAX_SUMMARY_CHARS =
+  Math.floor((shareCapacityChars() * 3) / 4) - 1000;
 
 /**
  * Upload a share payload, splitting it across pages when it exceeds one
@@ -68,7 +71,7 @@ export async function uploadShare(payload: string): Promise<TelegraphShare> {
     slices.push(payload.slice(at, at + MAX_PAYLOAD_CHARS));
   }
   if (slices.length > MAX_SHARE_PAGES) {
-    throw new Error("share payload exceeds Telegraph's page size limit");
+    throw new Error("share payload needs more pages than a share may span");
   }
 
   const account = await call("createAccount", { short_name: "retrogram" });
@@ -77,21 +80,24 @@ export async function uploadShare(payload: string): Promise<TelegraphShare> {
     throw new Error("telegra.ph returned no access token");
   }
 
-  const paths: string[] = [];
-  for (const slice of slices) {
-    const page = await call("createPage", {
-      access_token: accessToken,
-      // Single-letter title → short page path → short share URL.
-      title: "r",
-      author_name: "Rewindly",
-      content: JSON.stringify([{ tag: "p", children: [slice] }]),
-    });
-    const path = page.path;
-    if (typeof path !== "string") {
-      throw new Error("telegra.ph returned no page path");
-    }
-    paths.push(path);
-  }
+  // Promise.all keeps the pages in slice order, which is what reassembly
+  // depends on.
+  const paths = await Promise.all(
+    slices.map(async (slice) => {
+      const page = await call("createPage", {
+        access_token: accessToken,
+        // Single-letter title → short page path → short share URL.
+        title: "r",
+        author_name: "Rewindly",
+        content: JSON.stringify([{ tag: "p", children: [slice] }]),
+      });
+      const path = page.path;
+      if (typeof path !== "string") {
+        throw new Error("telegra.ph returned no page path");
+      }
+      return path;
+    }),
+  );
   return { paths, accessToken };
 }
 

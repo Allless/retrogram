@@ -22,6 +22,7 @@ import { topDms, topGroups } from "../stats/topContacts";
 import { trophyShelf } from "../stats/trophyShelf";
 import { topMediaByType } from "../stats/topMedia";
 import { volumeOverTime } from "../stats/volumeOverTime";
+import { MAX_SHARE_PAGES } from "./telegraph";
 
 import type { ActivityHeatmapResult } from "../stats/activityHeatmap";
 import type { EmojiCount } from "../stats/emojiFrequency";
@@ -184,8 +185,10 @@ export interface ShareBuild {
 const HIT_TEXT_LIMIT = 100;
 /* Shares carry fewer stickers/GIFs than the dashboard shows: with ten media
  * jobs the byte budget spread so thin that each rendered at ~60px. Three
- * apiece is the same story at roughly double the resolution. */
-const TOP_MEDIA_LIMIT = 3;
+ * apiece per page is the same story at roughly double the resolution — so
+ * the count follows the page budget rather than being pinned to it. */
+const MEDIA_PER_PAGE = 3;
+const TOP_MEDIA_LIMIT = MEDIA_PER_PAGE * MAX_SHARE_PAGES;
 
 const ALL_SECTIONS: ReadonlySet<ShareSection> = new Set(
   SHARE_SECTIONS.map((s) => s.key),
